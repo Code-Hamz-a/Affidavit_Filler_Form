@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Affidavit Filler</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --ink: #1d2433; --muted: #667085; --line: #e3e6ec;
+    --brand: #1f4e8c; --brand-ink: #fff; --ok: #1e7b4a; --ok-bg: #e6f4ec; --warn: #9a6200; --warn-bg: #fff4dc;
+    --err: #b42318; --err-bg: #fdecea; --focus: #2f6fcf;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+  header { background: var(--brand); color: var(--brand-ink); padding: 12px 20px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .sub { opacity: .8; font-size: 12.5px; }
+  header .spacer { flex: 1; }
+  header .status { font-size: 12.5px; opacity: .9; white-space: nowrap; }
+  header .status b.ok { color: #7ee2a8; }
+  header .status b.bad { color: #ffb4a8; }
+  header button { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.35); }
+  header button:hover { background: rgba(255,255,255,.24); }
+  main { display: grid; grid-template-columns: minmax(420px, 560px) 1fr; gap: 16px; padding: 16px; align-items: start; }
+  main > section:last-child { align-self: stretch; } /* lets the preview card stay pinned while scrolling */
+  @media (max-width: 1050px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 14.5px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 12px; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .grid .full { grid-column: 1 / -1; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  label .req { color: var(--err); }
+  input[type=text], input[type=date], select { width: 100%; padding: 6px 8px; border: 1px solid #cfd4dc; border-radius: 6px; font: inherit; background: #fff; color: var(--ink); }
+  input:focus, select:focus { outline: 2px solid var(--focus); outline-offset: -1px; border-color: var(--focus); }
+  input.missing { border-color: var(--err); background: var(--err-bg); }
+  input.auto { background: #f3f7fd; }
+  button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid #cfd4dc; background: #fff; color: var(--ink); cursor: pointer; }
+  button:hover { background: #f1f3f6; }
+  button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+  button.primary:hover { background: #1a4378; }
+  button.big { padding: 10px 16px; font-size: 15px; width: 100%; }
+  button.icon { padding: 2px 7px; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .drop { border: 2px dashed #b9c2d0; border-radius: 8px; padding: 14px; text-align: center; color: var(--muted); cursor: pointer; background: #fafbfc; }
+  .drop.over { border-color: var(--brand); background: #eef3fb; color: var(--brand); }
+  .drop b { color: var(--ink); }
+  .radios { display: flex; gap: 14px; align-items: center; }
+  .radios label { display: flex; gap: 5px; align-items: center; color: var(--ink); font-size: 13.5px; margin: 0; cursor: pointer; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .file { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+  .file:first-child { border-top: 0; }
+  .file .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+  .b-ok { background: var(--ok-bg); color: var(--ok); } .b-warn { background: var(--warn-bg); color: var(--warn); } .b-err { background: var(--err-bg); color: var(--err); } .b-mute { background: #eef0f3; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11.5px; padding: 4px 4px; border-bottom: 1px solid var(--line); }
+  td { padding: 3px 4px; border-bottom: 1px solid #f0f1f4; vertical-align: middle; }
+  td input[type=text], td select { padding: 3px 6px; font-size: 12.5px; }
+  tr.hl td { background: #fff7d6; }
+  tr.off td { opacity: .55; }
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .summary div { background: #f6f8fb; border-radius: 6px; padding: 6px 8px; }
+  .summary span { display: block; font-size: 11px; color: var(--muted); }
+  .summary b { font-size: 14px; }
+  .msgs div { padding: 7px 10px; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+  .msgs .err { background: var(--err-bg); color: var(--err); }
+  .msgs .warn { background: var(--warn-bg); color: var(--warn); }
+  .msgs .ok { background: var(--ok-bg); color: var(--ok); }
+  details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  .preview-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .preview-bar .grow { flex: 1; }
+  .pagewrap { position: relative; margin: 0 auto 18px; box-shadow: 0 1px 4px rgba(0,0,0,.18); background: #fff; }
+  .pagewrap canvas { display: block; width: 100%; height: auto; }
+  .pagewrap .plabel { position: absolute; top: -18px; left: 0; font-size: 11px; color: var(--muted); }
+  .pagewrap.adding { cursor: crosshair; }
+  .ov { position: absolute; border: 1.5px solid; border-radius: 2px; overflow: visible; white-space: nowrap; font-family: Helvetica, Arial, sans-serif; color: #0a3d91; line-height: 1; display: flex; align-items: flex-end; padding: 0 1px 1px; cursor: pointer; }
+  .ov.fill { border-color: rgba(30,123,74,.8); background: rgba(30,123,74,.08); }
+  .ov.empty { border-color: rgba(180,35,24,.9); background: rgba(180,35,24,.10); }
+  .ov.skip { border-color: rgba(120,120,120,.5); border-style: dashed; background: transparent; color: transparent; }
+  .ov.sel { outline: 3px solid #f5b800; }
+  .empty-preview { text-align: center; color: var(--muted); padding: 60px 20px; }
+  .busy { position: fixed; inset: 0; background: rgba(255,255,255,.7); display: none; place-items: center; z-index: 50; font-size: 15px; }
+  .busy.on { display: grid; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .muted { color: var(--muted); }
+  td .q { font-size: 11px; color: var(--muted); max-width: 190px; line-height: 1.25; margin-top: 2px; }
+  .subhead { font-size: 13px; margin: 14px 0 6px; }
+  .fac-scroll { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+  .fac-scroll th { position: sticky; top: 0; background: #fff; }
+  .fac-scroll td input { padding: 3px 5px; font-size: 12px; }
+  textarea { width: 100%; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid #cfd4dc; border-radius: 6px; }
+  .sw { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink); margin: 0; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Affidavit Filler</h1>
+    <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
+  </div>
+  <div class="spacer"></div>
+  <span id="app-status" class="status" title="Version of this tool">v2.4 · 02 Oct 2026 · <b id="app-ready">Loading…</b></span>
+  <button id="btn-reset" title="Clear everything and start a new request">New request</button>
+</header>
+
+<main>
+  <section>
+    <!-- Settings -->
+    <div class="card">
+      <details id="settings-box">
+        <summary>Settings &amp; facilities <span class="muted" id="settings-summary" style="font-weight:400"></span></summary>
+        <div class="grid" style="margin-top:10px">
+          <div><label>Default custodian / affiant name <span class="req">*</span></label><input type="text" id="s-custodian" placeholder="e.g. Jane Doe"></div>
+          <div><label>Title</label><input type="text" id="s-title"></div>
+          <div><label>County (where the affidavit is sworn)</label><input type="text" id="s-county"></div>
+          <div><label>State</label><input type="text" id="s-state"></div>
+        </div>
+        <div class="hint">Used for every facility unless the facility below has its own custodian or county.</div>
+        <h3 class="subhead">Standard subpoena answers</h3>
+        <div class="grid">
+          <div class="full"><label>Business address (added to “full name, occupation and title” answers)</label><input type="text" id="s-address"></div>
+          <div class="full"><label>Answer for “are the charges reasonable / services necessary?”</label><input type="text" id="s-noinfo"></div>
+          <div class="full"><label>Answer for “how long are records kept?”</label><input type="text" id="s-retention"></div>
+        </div>
+        <div class="hint">Business-records questions (custodian? regular course of business? made at or near the time? exact duplicates?) are answered “Yes” automatically.</div>
+        <h3 class="subhead">Facilities (<span id="fac-count"></span>)</h3>
+        <div class="fac-scroll">
+          <table id="fac-table">
+            <thead><tr><th>Facility (as in requests)</th><th>Name on affidavit</th><th>Custodian</th><th>County</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="row" style="margin-top:8px"><button id="fac-add">+ Add facility</button><button id="fac-paste-btn">Paste a list from Excel…</button></div>
+        <div id="fac-paste-box" style="display:none; margin-top:8px">
+          <textarea id="fac-paste" rows="6" placeholder="One facility per line — copy the column from Excel and paste here"></textarea>
+          <button id="fac-paste-add" class="primary" style="margin-top:6px">Add these facilities</button>
+        </div>
+        <div class="hint">Saved on this computer. The tool finds the facility in each request automatically, including “c/o CareCapital” and “DBA” names.</div>
+        <h3 class="subhead">Share settings with a colleague</h3>
+        <div class="row">
+          <button id="set-export" title="Save custodian, facilities, standard answers and remembered subpoena answers to a file">Export settings</button>
+          <button id="set-import" title="Load a settings file exported from another computer">Import settings</button>
+          <input type="file" id="set-file" accept=".json,application/json" hidden>
+        </div>
+        <div class="hint">The file contains settings only, no patient data.</div>
+      </details>
+    </div>
+
+    <!-- 1. Request -->
+    <div class="card">
+      <h2><span class="step">1</span> Request letter + affidavit (PDF)</h2>
+      <div class="drop" id="drop-req"><b>Drop the request PDF here</b> or click to choose<br><span class="hint">Law-firm letter / subpoena with the blank affidavit (ChartSwap download)</span></div>
+      <input type="file" id="in-req" accept="application/pdf,.pdf" hidden>
+      <div id="req-info" class="hint"></div>
+    </div>
+
+    <!-- 2. Case details -->
+    <div class="card">
+      <h2><span class="step">2</span> Case details</h2>
+      <div class="grid">
+        <div class="full">
+          <label>Affidavit type</label>
+          <div class="radios">
+            <label><input type="radio" name="type" value="records" checked> Medical records</label>
+            <label><input type="radio" name="type" value="billing"> Billing (18.001)</label>
+            <span id="type-detected" class="hint" style="margin:0"></span>
+          </div>
+        </div>
+        <div><label>Patient name <span class="req">*</span></label><input type="text" id="f-patient" data-auto></div>
+        <div><label>Date of birth <span class="req">*</span> <span id="dob-src" class="muted"></span></label><input type="text" id="f-dob" placeholder="MM/DD/YYYY" data-auto></div>
+        <div class="full"><label>Facility <span class="req">*</span></label><input type="text" id="f-facility" list="facility-list" data-auto><div id="fac-profile" class="hint" style="margin-top:3px"></div></div>
+        <div><label>DOS from <span class="req">*</span> <span id="from-src" class="muted"></span></label><input type="text" id="f-from" placeholder="MM/DD/YYYY" data-auto></div>
+        <div><label>DOS to <span id="to-src" class="muted"></span></label><input type="text" id="f-to" placeholder="Present" data-auto></div>
+        <div id="req-range" class="full hint" style="margin-top:-2px"></div>
+      </div>
+    </div>
+
+    <!-- 3. Records / invoices -->
+    <div class="card">
+      <h2><span class="step">3</span> <span id="att-title">Medical records to attach</span></h2>
+      <div class="drop" id="drop-att"><b>Drop records / invoices here</b> or click to choose<br><span class="hint">PDF, JPG or PNG · several files OK (e.g. Part 1 &amp; Part 2)</span></div>
+      <input type="file" id="in-att" accept="application/pdf,.pdf,image/jpeg,image/png" multiple hidden>
+      <div id="att-list" style="margin-top:8px"></div>
+      <div id="inv-box" style="display:none">
+        <div class="row" style="margin-top:8px">
+          <label class="sw"><input type="checkbox" id="f-sort" checked> Merge invoices in DOS order (first → last)</label>
+        </div>
+        <table id="inv-table" style="margin-top:6px">
+          <thead><tr><th>#</th><th>Invoice</th><th>DOS from</th><th>DOS to</th><th>Total $</th><th>Check</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="summary">
+          <div><span>First DOS</span><b id="sum-first">—</b></div>
+          <div><span>Last DOS</span><b id="sum-last">—</b></div>
+          <div><span>Invoice total</span><b id="sum-total">—</b></div>
+        </div>
+        <div class="grid" style="margin-top:10px">
+          <div><label>a. Total charged $</label><input type="text" id="f-total" data-auto></div>
+          <div><label>b. Written off $</label><input type="text" id="f-writeoff" value="0.00"></div>
+          <div><label>c. Paid to date $</label><input type="text" id="f-paid" value="0.00" data-auto></div>
+          <div><label>d. Outstanding $ (a − b − c)</label><input type="text" id="f-balance" data-auto></div>
+        </div>
+        <details id="more-amts" style="margin-top:8px">
+          <summary style="font-size:13px">Payment details (for subpoena / DWQ questions)</summary>
+          <div class="grid" style="margin-top:8px">
+            <div><label>Paid by insurance $</label><input type="text" id="f-ins-paid" value="0.00"></div>
+            <div><label>Paid by Medicare / Medicaid $</label><input type="text" id="f-med-paid" value="0.00"></div>
+            <div><label>Paid by patient $</label><input type="text" id="f-pt-paid" value="0.00"></div>
+            <div><label>Contractual adjustments $</label><input type="text" id="f-adjust" value="0.00"></div>
+            <div><label>Lien amount $</label><input type="text" id="f-lien" placeholder="if a lien was filed"></div>
+          </div>
+          <div class="hint">Paid to date = insurance + Medicare/Medicaid + patient. Balance = total − written off − adjustments − paid.</div>
+        </details>
+      </div>
+      <div class="grid" style="margin-top:10px">
+        <div><label>Pages of records attached</label><input type="text" id="f-pages" data-auto></div>
+      </div>
+    </div>
+
+    <!-- 4. Blanks -->
+    <div class="card">
+      <h2><span class="step">4</span> Affidavit blanks</h2>
+      <div class="grid" style="margin-bottom:8px">
+        <div><label>Sworn / notary date</label><input type="date" id="f-sworn-date"></div>
+        <div style="align-self:end"><label class="sw"><input type="checkbox" id="f-fill-sworn"> Fill the sworn date blanks</label></div>
+      </div>
+      <div id="blanks-empty" class="hint">Load a request PDF to detect the blanks.</div>
+      <table id="blanks-table" style="display:none">
+        <thead><tr><th>Pg</th><th>Field</th><th>Value</th><th title="Write this blank">Fill</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="hint">Only the affidavit page(s) are filled — letters, HIPAA authorizations and other forms are never changed. Signature and notary-signature lines stay blank on purpose. Click <b>Add text</b> above the preview, then click the page, to type anywhere (e.g. on a scanned affidavit).</div>
+    </div>
+
+    <!-- 5. Output -->
+    <div class="card">
+      <h2><span class="step">5</span> Create PDF</h2>
+      <div class="grid">
+        <div class="full"><label>File name</label><input type="text" id="f-filename" data-auto></div>
+        <div class="full">
+          <label>Pages from the request PDF</label>
+          <select id="f-keep">
+            <option value="all">All pages (letter + affidavit + authorization)</option>
+            <option value="affidavit">Only the affidavit page(s)</option>
+            <option value="none">None (records only)</option>
+          </select>
+        </div>
+        <div class="full"><label class="sw"><input type="checkbox" id="f-standard"> Add a standard affidavit page (when the request has no affidavit to fill)</label></div>
+      </div>
+      <div class="msgs" id="msgs" style="margin-top:10px"></div>
+      <button class="primary big" id="btn-generate">Create &amp; download PDF</button>
+      <div class="row" style="margin-top:8px"><button id="btn-open" disabled>Open last PDF in a new tab</button><span id="out-info" class="hint" style="margin:0"></span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card" style="position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto">
+      <div class="preview-bar">
+        <b>Preview</b>
+        <span class="hint grow" style="margin:0">green = filled · red = empty · dashed = left blank</span>
+        <label class="sw"><input type="checkbox" id="pv-all"> All pages</label>
+        <button id="btn-add" title="Click on the page to place your own text">Add text</button>
+      </div>
+      <div id="preview"><div class="empty-preview">The affidavit page(s) will appear here.</div></div>
+    </div>
+  </section>
+</main>
+
+<datalist id="facility-list"></datalist>
+<div class="busy" id="busy"><div id="busy-text">Working…</div></div>
+
+<script src="lib/pdf.min.js"></script>
+<script src="lib/pdf.worker.min.js"></script>
+<script src="lib/pdf-lib.min.js"></script>
+<script src="js/engine.js?v=2.4"></script>
+<script src="js/ocr.js?v=2.4"></script>
+<script src="js/app.js?v=2.4"></script>
+</body>
+</html>

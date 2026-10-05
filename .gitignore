@@ -1,0 +1,13 @@
+# Never commit patient data: requests, records, invoices, filled affidavits, exported settings
+*.pdf
+*.PDF
+*.jpg
+*.jpeg
+*.png
+*.json
+*.zip
+
+# Editor / OS files
+.vscode/
+Thumbs.db
+desktop.ini
