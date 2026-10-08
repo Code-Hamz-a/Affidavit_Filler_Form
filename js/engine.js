@@ -26,6 +26,10 @@
     dos_from: 'DOS from (first date of service)',
     dos_to: 'DOS to (last date of service)',
     dos_range: 'Dates of service',
+    dos_from_md: 'DOS from — month & day',
+    dos_from_y2: 'DOS from — year (2 digits)',
+    dos_to_md: 'DOS to — month & day',
+    dos_to_y2: 'DOS to — year (2 digits)',
     amt_total: '$ Total charged',
     amt_writeoff: '$ Written off',
     amt_paid: '$ Paid to date',
@@ -205,6 +209,37 @@
     }
     return out;
   }
+
+  /*
+   * Underlines in a scanned page are only pixels. Finds thin, long, dark horizontal runs in a greyscale image
+   * (one byte per pixel) and returns them in pixel coordinates: [{ x0, x1, y }] (y = bottom row of the line).
+   * Letters never make long unbroken runs, so only blanks, signature lines and rules come back.
+   */
+  AE.detectImageLines = function (gray, w, h, opts) {
+    opts = opts || {};
+    const dark = opts.threshold || 140, minLen = opts.minLen || Math.round(w * 0.035), maxGap = 3, maxThick = opts.maxThick || 6;
+    const runs = [];
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      let start = -1, lastDark = -10;
+      for (let x = 0; x <= w; x++) {
+        const isDark = x < w && gray[row + x] < dark;
+        if (isDark) { if (start < 0) start = x; lastDark = x; }
+        else if (start >= 0 && x - lastDark > maxGap) {
+          if (lastDark - start + 1 >= minLen) runs.push({ x0: start, x1: lastDark, y0: y, y1: y });
+          start = -1;
+        }
+      }
+    }
+    // stack the rows of one line together (a line is 1–5 px thick)
+    const lines = [];
+    for (const r of runs) {
+      const l = lines.find(o => r.y0 - o.y1 <= 1 && Math.min(o.x1, r.x1) - Math.max(o.x0, r.x0) > 0.6 * Math.min(o.x1 - o.x0, r.x1 - r.x0));
+      if (l) { l.x0 = Math.min(l.x0, r.x0); l.x1 = Math.max(l.x1, r.x1); l.y1 = r.y1; }
+      else lines.push({ ...r });
+    }
+    return lines.filter(l => l.y1 - l.y0 + 1 <= maxThick).map(l => ({ x0: l.x0, x1: l.x1, y: l.y1 }));
+  };
 
   // Thin horizontal strokes / rectangles (underlines, signature lines) in page space: [{x, y, w}].
   function horizontalLines(ol, O) {
@@ -597,6 +632,13 @@
     if (sameLinePrev && prev.kind === 'notary_month' && /,\s*$/.test(pre)) return 'notary_year4';
     if (/(subscribed|sworn)[^.]*\b(on|this)\s*$/.test(before) || /(subscribed|sworn)[^.]*before me,?\s*$/.test(before)) return 'notary_date';
 
+    // Dates of service written as "from ________, 20__ to ________, 20__" (month + day, then the year's last digits)
+    if (/^\s*,\s*(20|19)?\s*$/.test(sufL) || /^\s*,\s*(20|19)\b/.test(suf)) {
+      if (/\bfrom\s*$/.test(lead)) return 'dos_from_md';
+      if (/\b(to|through|thru)\s*$/.test(lead)) return 'dos_to_md';
+    }
+    if (sameLinePrev && /^dos_(from|to)_md$/.test(prev.kind) && /,?\s*(20|19)\.?\s*$/.test(pre)) return prev.kind.replace('_md', '_y2');
+
     // Dates of service
     if (/\bfrom\s*$/.test(pre) && /^\s*(to|through|thru|until|-)\b/.test(after)) return 'dos_from';
     if (/records (from|dated from)\s*$/.test(pre)) return 'dos_range';
@@ -610,7 +652,7 @@
     if (/^\s*(provided to|(still )?has a right to be paid|has the right)/.test(sufL)) return 'facility';
     if (/(pertaining to|patient(?:'s)? name|name of patient|\bpatient|\bre|regarding|in reference to)\s*[:?]?\s*$/.test(pre) ||
         /^\s*\(?\s*(patient|name of patient)/.test(suf)) return 'patient';
-    if (/(custodian of (the )?(billing )?records (for|of)|records custodian for|employed by|kept by|course of business of|business of|representative of|health ?care provider|name of (the )?(facility|provider|hospital)|facility|provider|hospital)\s*[:?]?\s*$/.test(before) ||
+    if (/(custodian of (the )?(medical |billing )?records (for|of)|records custodian for|employed by|kept by|course of business of|business of|representative of|health ?care provider|name of (the )?(facility|provider|hospital)|facility|provider|hospital)\s*[:?]?\s*$/.test(before) ||
         /^\s*\(?\s*(name of (the )?(facility|provider|hospital)|facility|provider)\b/.test(suf)) return 'facility';
     if (/(title|position|capacity)\s*[:?]?\s*$/.test(pre)) return 'title';
     if (/(from|beginning)\s*$/.test(pre)) return /^\s*(to|through|thru)\b/.test(after) ? 'dos_from' : 'dos_range';
@@ -729,6 +771,13 @@
       case 'dos_from': return d.dosFrom || '';
       case 'dos_to': return d.dosTo || '';
       case 'dos_range': return [d.dosFrom, d.dosTo].filter(Boolean).join(' to ');
+      case 'dos_from_md': case 'dos_to_md': case 'dos_from_y2': case 'dos_to_y2': {
+        // "December 01" + "25" for forms that print ", 20__" after the blank
+        const raw = /from/.test(kind) ? d.dosFrom : d.dosTo;
+        const dt = AE.parseDate(raw);
+        if (!dt) return /_md$/.test(kind) ? (raw || '') : '';
+        return /_md$/.test(kind) ? `${MONTHS[dt.getMonth()]} ${String(dt.getDate()).padStart(2, '0')}` : String(dt.getFullYear()).slice(2);
+      }
       // Unknown total/balance stays empty (shown red) instead of printing 0.00.
       case 'amt_total': return d.total == null ? '' : money(d.total);
       case 'amt_writeoff': return money(d.writeoff);
@@ -1153,7 +1202,7 @@
         const y0 = Math.max(f.cover.y0 - 1.5, f.y + 0.6);
         page.drawRectangle({ x: f.cover.x0 - 1, y: y0, width: f.cover.x1 - f.cover.x0 + 2, height: f.cover.y1 - y0 + 1, color: rgb(1, 1, 1) });
       }
-      let size = Math.min(f.size || 11, Math.max(6, (f.h || 12) * 0.9));
+      let size = Math.min(f.size || 11, Math.max(8, (f.h || 12) * 0.9)); // ≥ 8pt to start; shrinks below only to fit
       const avail = Math.max(10, (f.w || 100) - 2);
       while (size > 6 && font.widthOfTextAtSize(v, size) > avail) size -= 0.5;
       const tw = font.widthOfTextAtSize(v, size);

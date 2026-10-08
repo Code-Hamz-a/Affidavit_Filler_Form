@@ -279,6 +279,15 @@
         const lineH = Math.abs(yb - ya);
         return { str: wd.text, x: Math.min(xa, xb), y: Math.min(ya, yb) + lineH * 0.2, w: Math.abs(xb - xa), h: Math.min(Math.max(lineH * 0.8, 6), 16), font: 'ocr' };
       });
+      // The blanks on a scan are drawn lines in the picture — find them in the pixels.
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const gray = new Uint8Array(canvas.width * canvas.height);
+      for (let i = 0, j = 0; j < gray.length; i += 4, j++) gray[j] = (img[i] * 0.3 + img[i + 1] * 0.59 + img[i + 2] * 0.11) | 0;
+      p.hlines = AE.detectImageLines(gray, canvas.width, canvas.height).map(l => {
+        const [xa, ya] = vp.convertToPdfPoint(l.x0, l.y);
+        const [xb] = vp.convertToPdfPoint(l.x1, l.y);
+        return { x: Math.min(xa, xb), y: ya, w: Math.abs(xb - xa) };
+      });
       p.ocr = true;
       p._lines = null;
     }
@@ -679,7 +688,7 @@
       const v = b.kind === 'custom' ? (b.override || '') : blankValue(b);
       ov.textContent = b.include ? v : '';
       // Same sizing as the PDF: up to 11pt, shrunk (down to 6pt) until the value fits the blank.
-      let size = Math.min(11, Math.max(6, b.h * 0.9));
+      let size = Math.min(11, Math.max(8, b.h * 0.9));
       while (size > 6 && AE.textW(v.trim(), size) > b.w - 2) size -= 0.5;
       ov.style.fontSize = (size * (+ov.dataset.scale || 1)) + 'px';
       ov.className = 'ov ' + (!b.include ? 'skip' : v.trim() ? 'fill' : 'empty') + (S.sel === b.uid ? ' sel' : '');
