@@ -191,7 +191,7 @@
       const info = AE.parseRequest(r.pages);
       const blanks = AE.findBlanks(r.pages);
       if (S.req && S.req.doc) S.req.doc.destroy();
-      S.req = { name: file.name, bytes, doc: r.doc, pages: r.pages, info };
+      S.req = { name: file.name, bytes, doc: r.doc, pages: r.pages, info, cut: new Set() }; // cut = pages the user removed
       S.manual = {};
       S.customs = [];
       S.affPages = new Set(r.pages.filter(p => AE.isAffidavitPage(p)).map(p => p.num));
@@ -350,8 +350,15 @@
     renderAttachments();
   }
 
+  // Pages of a file that go into the PDF: all except CareCapital covers and pages the user removed (a.cut).
+  const isCut = (a, i) => !!(a.cut && a.cut.has(i));
+  const keptPages = a => a.kind === 'pdf' ? (a.keep || []).filter(i => !isCut(a, i)) : (isCut(a, 0) ? [] : [0]);
+  const keptCount = a => keptPages(a).length;
+  const unitPages = (a, u) => u.pages ? u.pages.filter(i => !isCut(a, i)) : (isCut(a, 0) ? [] : null);
+  const unitAlive = (a, u) => { const p = unitPages(a, u); return p === null || p.length > 0; };
+
   function orderedUnits() {
-    const units = S.atts.flatMap(a => a.units.map(u => ({ a, u })));
+    const units = S.atts.flatMap(a => a.units.filter(u => unitAlive(a, u)).map(u => ({ a, u })));
     if (type() === 'billing' && $('#f-sort').checked) {
       units.sort((x, y) => (AE.parseDate(x.u.from) || 8.64e15) - (AE.parseDate(y.u.from) || 8.64e15));
     }
@@ -369,7 +376,8 @@
         : '<span class="badge b-mute" title="Scanned/image — check the patient by eye">no text</span>';
       return `<div class="file">
         <span class="name" title="${esc(a.name)}">${i + 1}. ${esc(a.name)}</span>
-        <span class="badge b-mute">${a.pageCount} pg</span>${chk}${a.removed && a.removed.length ? `<span class="badge b-mute" title="CareCapital cover letter (page ${a.removed.join(', ')}) left out">CareCapital page removed</span>` : ''}
+        <span class="badge b-mute">${keptCount(a)} pg</span>${chk}${a.removed && a.removed.length ? `<span class="badge b-mute" title="CareCapital cover letter (page ${a.removed.join(', ')}) left out">CareCapital page removed</span>` : ''}${a.cut && a.cut.size ? `<span class="badge b-warn" title="Pages you removed: ${[...a.cut].sort((x, y) => x - y).map(i => i + 1).join(', ')}">${a.cut.size} removed</span>` : ''}
+        ${a.kind === 'pdf' ? `<button class="icon" data-pg="${a.id}" title="Choose which pages go into the PDF">Pages</button>` : ''}
         <button class="icon" data-mv="${a.id}" data-d="-1" title="Move up">▲</button>
         <button class="icon" data-mv="${a.id}" data-d="1" title="Move down">▼</button>
         <button class="icon" data-rm="${a.id}" title="Remove">✕</button></div>`;
@@ -385,6 +393,7 @@
       S.atts = S.atts.filter(a => a.id !== +b.dataset.rm);
       renderAttachments(); refresh();
     });
+    $$('#att-list [data-pg]').forEach(b => b.onclick = () => openPagePicker(S.atts.find(a => a.id === +b.dataset.pg)));
 
     if (!billing) return;
     const tb = $('#inv-table tbody');
@@ -419,8 +428,43 @@
   $$('input[name=type]').forEach(r => r.addEventListener('change', () => { renderAttachments(); refresh(); }));
 
   // ------------------------------------------------------------ derived values
+  // Page picker for a record / invoice file: click a thumbnail to leave that page out of the PDF.
+  let pickerDoc = null;
+  async function openPagePicker(a) {
+    if (!a) return;
+    const modal = $('#pg-modal'), grid = $('#pg-grid');
+    $('#pg-title').textContent = a.name;
+    grid.innerHTML = '';
+    modal.hidden = false;
+    a.cut = a.cut || new Set();
+    const cells = a.keep.map(i => {
+      const cell = document.createElement('div');
+      cell.className = 'pg-cell' + (a.cut.has(i) ? ' cut' : '');
+      cell.innerHTML = `<canvas></canvas><span>Page ${i + 1}</span>`;
+      cell.title = 'Click to remove / keep this page';
+      cell.onclick = () => { if (a.cut.has(i)) a.cut.delete(i); else a.cut.add(i); cell.classList.toggle('cut', a.cut.has(i)); };
+      grid.appendChild(cell);
+      return cell;
+    });
+    const doc = await pdfjsLib.getDocument({ data: a.bytes.slice(0), isEvalSupported: false }).promise;
+    pickerDoc = doc;
+    for (let k = 0; k < a.keep.length; k++) {
+      if (modal.hidden || pickerDoc !== doc) break; // closed while thumbnails were drawing
+      const page = await doc.getPage(a.keep[k] + 1);
+      const vp = page.getViewport({ scale: 150 / page.getViewport({ scale: 1 }).width });
+      const c = cells[k].querySelector('canvas');
+      c.width = vp.width; c.height = vp.height;
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    }
+  }
+  $('#pg-done').addEventListener('click', () => {
+    $('#pg-modal').hidden = true;
+    if (pickerDoc) { pickerDoc.destroy(); pickerDoc = null; }
+    renderAttachments(); refresh();
+  });
+
   function invoiceSummary() {
-    const units = S.atts.flatMap(a => a.units);
+    const units = S.atts.flatMap(a => a.units.filter(u => unitAlive(a, u)));
     const froms = units.map(u => AE.parseDate(u.from)).filter(Boolean);
     const tos = units.map(u => AE.parseDate(u.to) || AE.parseDate(u.from)).filter(Boolean);
     const totals = units.map(u => AE.parseMoney(u.total));
@@ -488,7 +532,7 @@
   // Recomputes automatic fields, blank values, preview labels and warnings.
   function refresh() {
     const billing = type() === 'billing';
-    const recPages = S.atts.reduce((s, a) => s + a.pageCount, 0);
+    const recPages = S.atts.reduce((s, a) => s + keptCount(a), 0);
     setAuto('f-pages', S.atts.length ? String(recPages) : '');
 
     if (billing) {
@@ -627,10 +671,20 @@
       const wrap = document.createElement('div');
       wrap.className = 'pagewrap';
       wrap.style.width = cssVp.width + 'px';
-      wrap.innerHTML = `<span class="plabel">Page ${n}${S.affPages.has(n) ? '' : ' — not an affidavit page, nothing is written here'}</span>`;
+      wrap.innerHTML = `<span class="plabel">Page ${n}${S.affPages.has(n) ? '' : ' — not an affidavit page, nothing is written here'}` +
+        `<button class="icon pg-del" type="button" title="Leave this page out of the PDF">Remove page</button></span>` +
+        `<div class="cut-veil">Removed — this page will not be in the PDF</div>`;
       const canvas = document.createElement('canvas');
       canvas.width = vp.width; canvas.height = vp.height;
       wrap.appendChild(canvas);
+      const del = wrap.querySelector('.pg-del');
+      const showCut = () => { const c = S.req.cut.has(n); wrap.classList.toggle('cut', c); del.textContent = c ? 'Undo' : 'Remove page'; };
+      del.addEventListener('click', e => {
+        e.stopPropagation();
+        if (S.req.cut.has(n)) S.req.cut.delete(n); else S.req.cut.add(n);
+        showCut(); refresh();
+      });
+      showCut();
       box.appendChild(wrap);
       await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
       pageViews.set(n, { wrap, vp: cssVp });
@@ -762,10 +816,12 @@
     if (S.req && keep === 'affidavit') {
       keepPages = [...S.affPages].sort((a, c) => a - c);
     } else if (S.req && keep === 'none') keepPages = [];
+    // pages the user removed from the request with "Remove page"
+    if (S.req && S.req.cut && S.req.cut.size) keepPages = (keepPages || S.req.pages.map(p => p.num)).filter(n => !S.req.cut.has(n));
     const attachments = billing
-      ? orderedUnits().map(({ a, u }) => ({ bytes: a.bytes, kind: a.kind, pages: u.pages || undefined,
-        label: `Invoice ${u.from || '(no DOS)'} — ${a.name}`, count: u.pages ? u.pages.length : 1 }))
-      : S.atts.map(a => ({ bytes: a.bytes, kind: a.kind, pages: a.keep, label: a.name, count: a.pageCount }));
+      ? orderedUnits().map(({ a, u }) => { const pages = unitPages(a, u); return { bytes: a.bytes, kind: a.kind, pages: pages || undefined,
+        label: `Invoice ${u.from || '(no DOS)'} — ${a.name}`, count: pages ? pages.length : 1 }; })
+      : S.atts.filter(a => keptCount(a) > 0).map(a => ({ bytes: a.bytes, kind: a.kind, pages: a.kind === 'pdf' ? keptPages(a) : undefined, label: a.name, count: keptCount(a) }));
     return {
       keepPages, attachments,
       reqPages: S.req ? (keepPages || S.req.pages.map(p => p.num)) : [],

@@ -39,6 +39,7 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
    - The provider name is printed without "c/o CareCapital".
    - Signature and notary-signature lines stay blank.
    - For a scanned affidavit, click **Add text** and then click the page to type anywhere.
+   - **Removing pages:** tick **All pages** above the preview and press **Remove page** on any page of the request (press **Undo** to bring it back). For records and invoices, press **Pages** next to the file and click the pages to leave out. The page count, invoice totals and DOS update automatically.
 6. **Create & download PDF**. The file name is filled in automatically:
    - Records: `Patient Name_affidavit.pdf`
    - Billing: `Patient Name_bill_affidavit.pdf`
