@@ -1160,7 +1160,7 @@
   /*
    * opts = {
    *   requestBytes, keepPages: [1-based page numbers] | null (all),
-   *   fills: [{page, x, y, w, h, value, align}],
+   *   fills: [{page, x, y, w, h, value, align, size?}],
    *   attachments: [{bytes, kind: 'pdf'|'jpg'|'png', pages?: [0-based page indexes]}],
    *   standard: null | {type, data, insertAfter}   // generated affidavit page
    * }
@@ -1202,7 +1202,8 @@
         const y0 = Math.max(f.cover.y0 - 1.5, f.y + 0.6);
         page.drawRectangle({ x: f.cover.x0 - 1, y: y0, width: f.cover.x1 - f.cover.x0 + 2, height: f.cover.y1 - y0 + 1, color: rgb(1, 1, 1) });
       }
-      let size = Math.min(f.size || 11, Math.max(8, (f.h || 12) * 0.9)); // ≥ 8pt to start; shrinks below only to fit
+      // ≥ 8pt to start (or the size the user picked for their own text); shrinks below only to fit
+      let size = f.size || Math.min(11, Math.max(8, (f.h || 12) * 0.9));
       const avail = Math.max(10, (f.w || 100) - 2);
       while (size > 6 && font.widthOfTextAtSize(v, size) > avail) size -= 0.5;
       const tw = font.widthOfTextAtSize(v, size);

@@ -79,6 +79,15 @@
   .ov.empty { border-color: rgba(180,35,24,.9); background: rgba(180,35,24,.10); }
   .ov.skip { border-color: rgba(120,120,120,.5); border-style: dashed; background: transparent; color: transparent; }
   .ov.sel { outline: 3px solid #f5b800; }
+  /* manual editing on the preview */
+  .ov.user { border-color: rgba(47,111,207,.9); background: rgba(47,111,207,.08); cursor: move; touch-action: none; }
+  .ov .rs { position: absolute; right: -4px; top: -2px; bottom: -2px; width: 8px; cursor: ew-resize; }
+  .ov .tb { display: none; position: absolute; right: -2px; bottom: 100%; margin-bottom: 4px; gap: 2px; z-index: 3; }
+  .ov.user.sel .tb { display: flex; }
+  .ov .tb button { padding: 0 6px; font: 600 11px/18px "Segoe UI", system-ui, sans-serif; color: var(--ink); }
+  .ov-edit { position: absolute; z-index: 4; padding: 0 2px; border: 2px solid var(--focus); border-radius: 2px; font-family: Helvetica, Arial, sans-serif; color: #0a3d91; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  .ov-ghost { position: absolute; border: 1.5px dashed var(--focus); background: rgba(47,111,207,.08); pointer-events: none; }
+  .pagewrap .pg-aff { padding: 0 6px; font-size: 11px; line-height: 16px; }
   .empty-preview { text-align: center; color: var(--muted); padding: 60px 20px; }
   .busy { position: fixed; inset: 0; background: rgba(255,255,255,.7); display: none; place-items: center; z-index: 50; font-size: 15px; }
   .busy.on { display: grid; }
@@ -119,7 +128,7 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v2.6 · 09 Oct 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v2.7 · 16 Oct 2026 · <b id="app-ready">Loading…</b></span>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
 
@@ -249,7 +258,8 @@
         <thead><tr><th>Pg</th><th>Field</th><th>Value</th><th title="Write this blank">Fill</th></tr></thead>
         <tbody></tbody>
       </table>
-      <div class="hint">Only the affidavit page(s) are filled — letters, HIPAA authorizations and other forms are never changed. Signature and notary-signature lines stay blank on purpose. Click <b>Add text</b> above the preview, then click the page, to type anywhere (e.g. on a scanned affidavit).</div>
+      <div class="hint">Only the affidavit page(s) are filled — letters, HIPAA authorizations and other forms are never changed. Signature and notary-signature lines stay blank on purpose.<br>
+        <b>Manual editing:</b> click any box on the preview to type in it. For a blank the tool missed, press <b>Add text</b> and click (or drag across) the spot — drag your box to move it, pull its right edge to resize, A−/A+ for the text size. If the affidavit page itself was not recognised, press <b>Edit this page</b> above it.</div>
     </div>
 
     <!-- 5. Output -->
@@ -277,7 +287,7 @@
     <div class="card" style="position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto">
       <div class="preview-bar">
         <b>Preview</b>
-        <span class="hint grow" style="margin:0">green = filled · red = empty · dashed = left blank · tick “All pages” to remove any page</span>
+        <span class="hint grow" style="margin:0">green = filled · red = empty · blue = your text · click a box to type · tick “All pages” to remove any page</span>
         <label class="sw"><input type="checkbox" id="pv-all"> All pages</label>
         <button id="btn-add" title="Click on the page to place your own text">Add text</button>
       </div>
@@ -303,8 +313,8 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/engine.js?v=2.6"></script>
-<script src="js/ocr.js?v=2.6"></script>
-<script src="js/app.js?v=2.6"></script>
+<script src="js/engine.js?v=2.7"></script>
+<script src="js/ocr.js?v=2.7"></script>
+<script src="js/app.js?v=2.7"></script>
 </body>
 </html>

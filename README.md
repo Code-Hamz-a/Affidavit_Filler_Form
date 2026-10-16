@@ -38,7 +38,11 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
    - Blanks made with **underline lines** (Word forms that underline spaces instead of typing "____") are found too. A blank split into pieces ("____ ____") is filled as one.
    - The provider name is printed without "c/o CareCapital".
    - Signature and notary-signature lines stay blank.
-   - For a scanned affidavit, click **Add text** and then click the page to type anywhere.
+   - **Manual editing** (for anything the tool missed or got wrong):
+     - Click any box on the preview and type straight into it. **Enter** or clicking elsewhere keeps it, **Esc** undoes it.
+     - For a blank the tool did not find (or a scanned affidavit), press **Add text**, then click the spot, or drag across it to set the width. Type, then press Enter.
+     - Your own boxes are blue. Drag one to move it, pull its right edge to resize it, and use **A−/A+** for the text size. Arrow keys nudge the selected box (Shift = bigger steps). **Delete** or **✕** removes it. In step 4 you can also switch it to a field (patient name, DOS, …) to fill that value automatically.
+     - If the affidavit page itself was not recognised, its page is locked. Tick **All pages**, then press **Edit this page** above it. You'll be asked to confirm, because HIPAA authorizations, letters and other forms must never be edited. **Lock page** undoes it.
    - **Removing pages:** tick **All pages** above the preview and press **Remove page** on any page of the request (press **Undo** to bring it back). For records and invoices, press **Pages** next to the file and click the pages to leave out. The page count, invoice totals and DOS update automatically.
 6. **Create & download PDF**. The file name is filled in automatically:
    - Records: `Patient Name_affidavit.pdf`
