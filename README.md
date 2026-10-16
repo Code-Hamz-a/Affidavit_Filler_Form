@@ -48,6 +48,7 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
 6. **Create & download PDF**. The file name is filled in automatically:
    - Records: `Patient Name_affidavit.pdf`
    - Billing: `Patient Name_bill_affidavit.pdf`
+   - Court-case words around the name (Plaintiff, Defendant, Petitioner, Claimant, "et al", "v. …") are left out of the patient name and the file name.
 
 If a request has no affidavit to fill, tick **Add a standard affidavit page**. It adds one of these:
 - a records affidavit (Tex. R. Evid. 902(10))

@@ -816,6 +816,7 @@
     out.subpoena = /deposition (up)?on written questions|written interrogatories|subpoena|duces tecum/i.test(flat);
 
     const clean = s => (s || '').replace(/_+/g, ' ').replace(/\s+/g, ' ').replace(/^[\s:,-]+|[\s:,.;-]+$/g, '').trim();
+    const cleanName = s => AE.stripParty(clean(s));
     const okName = s => s && s.length >= 3 && s.length <= 60 && !/\d/.test(s) && /[a-z]/i.test(s) && s.split(' ').length <= 6;
 
     const namePatterns = [
@@ -826,7 +827,7 @@
     ];
     for (const rx of namePatterns) {
       const m = text.match(rx);
-      if (m && okName(clean(m[1])) && !/request|record|billing|affidavit|subpoena/i.test(m[1])) { out.patient = clean(m[1]); break; }
+      if (m && okName(cleanName(m[1])) && !/request|record|billing|affidavit|subpoena/i.test(m[1])) { out.patient = cleanName(m[1]); break; }
     }
     if (!out.patient) {
       const flatRx = [
@@ -838,7 +839,7 @@
       ];
       for (const rx of flatRx) {
         const m = flat.match(rx);
-        if (m && okName(clean(m[1]))) { out.patient = clean(m[1]); break; }
+        if (m && okName(cleanName(m[1]))) { out.patient = cleanName(m[1]); break; }
       }
     }
     // "LAST, FIRST" / "ROBERT BROWN" → "First Last"
@@ -871,8 +872,17 @@
     return out;
   };
   // "Doe, John Jr." / "SMITH, JANE" → "John Doe Jr." / "Jane Smith"
+  // Court-case words next to a name ("VICTOR MORENO, Plaintiff, v. …", "Plaintiff John Doe") are not part of it.
+  const PARTY_RX = /\b(?:plaintiffs?|defendants?|petitioners?|respondents?|claimants?|applicants?|appellants?|appellees?|intervenors?|movants?|et\.? al\.?|individually|deceased)\b/i;
+  AE.stripParty = function (s) {
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    s = s.replace(new RegExp('^(?:' + PARTY_RX.source + '[\\s,:;-]*)+', 'i'), ''); // in front of the name
+    const m = s.match(PARTY_RX);
+    if (m) s = s.slice(0, m.index); // after the name: drop it and everything that follows ("v. ABC Corp")
+    return s.replace(/[\s,;:(-]+$/, '').trim();
+  };
   AE.personName = function (s) {
-    s = String(s || '').replace(/\s+/g, ' ').trim().replace(/[,;:]+$/, '');
+    s = AE.stripParty(s).replace(/[,;:]+$/, '');
     if (/,/.test(s)) {
       const [last, rest] = s.split(/,(.+)/).map(x => (x || '').trim());
       const parts = rest.split(' ');
@@ -1310,7 +1320,7 @@
   }
 
   AE.fileName = function (patient, type, pattern) {
-    const name = (patient || 'Patient').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim();
+    const name = (AE.stripParty(patient) || 'Patient').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim();
     const p = pattern || (type === 'billing' ? '{name}_bill_affidavit' : '{name}_affidavit');
     return p.replace('{name}', name) + '.pdf';
   };
