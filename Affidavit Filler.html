@@ -73,20 +73,44 @@
   .pagewrap { position: relative; margin: 0 auto 18px; box-shadow: 0 1px 4px rgba(0,0,0,.18); background: #fff; }
   .pagewrap canvas { display: block; width: 100%; height: auto; }
   .pagewrap .plabel { position: absolute; top: -18px; left: 0; font-size: 11px; color: var(--muted); }
-  .pagewrap.adding { cursor: crosshair; }
   .ov { position: absolute; border: 1.5px solid; border-radius: 2px; overflow: visible; white-space: nowrap; font-family: Helvetica, Arial, sans-serif; color: #0a3d91; line-height: 1; display: flex; align-items: flex-end; padding: 0 1px 1px; cursor: pointer; }
   .ov.fill { border-color: rgba(30,123,74,.8); background: rgba(30,123,74,.08); }
   .ov.empty { border-color: rgba(180,35,24,.9); background: rgba(180,35,24,.10); }
   .ov.skip { border-color: rgba(120,120,120,.5); border-style: dashed; background: transparent; color: transparent; }
   .ov.sel { outline: 3px solid #f5b800; }
-  /* manual editing on the preview */
-  .ov.user { border-color: rgba(47,111,207,.9); background: rgba(47,111,207,.08); cursor: move; touch-action: none; }
-  .ov .rs { position: absolute; right: -4px; top: -2px; bottom: -2px; width: 8px; cursor: ew-resize; }
-  .ov .tb { display: none; position: absolute; right: -2px; bottom: 100%; margin-bottom: 4px; gap: 2px; z-index: 3; }
-  .ov.user.sel .tb { display: flex; }
-  .ov .tb button { padding: 0 6px; font: 600 11px/18px "Segoe UI", system-ui, sans-serif; color: var(--ink); }
+  /* editing tools on the preview (like the Edge PDF viewer) */
+  .edit-bar { position: sticky; top: -14px; z-index: 6; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; background: var(--card); padding: 6px 0 8px; margin: -4px 0 4px; border-bottom: 1px solid var(--line); }
+  .edit-bar [data-tool] { display: inline-flex; gap: 6px; align-items: center; border-color: transparent; background: transparent; }
+  .edit-bar [data-tool]:hover { background: #eef1f5; }
+  .edit-bar [data-tool].on { background: #e3ecfa; border-color: #b9cdee; color: var(--brand); }
+  .edit-bar svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .edit-bar .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+  #pen-opts { display: inline-flex; gap: 6px; align-items: center; }
+  #pen-opts[hidden] { display: none; }
+  #pen-opts select { width: auto; padding: 3px 6px; font-size: 12.5px; }
+  .swatch { width: 18px; height: 18px; padding: 0; border-radius: 50%; background: var(--c) !important; border: 2px solid #fff; box-shadow: 0 0 0 1px #b9c0cc; }
+  .swatch.on { box-shadow: 0 0 0 2px var(--focus); }
+  #preview[data-tool=text] .pagewrap { cursor: text; }
+  #preview[data-tool=draw] .pagewrap, #preview[data-tool=erase] .pagewrap { cursor: crosshair; }
+  #preview[data-tool=draw] .ov, #preview[data-tool=erase] .ov { pointer-events: none; }
+  .pagewrap svg.ink { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .ink polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .pagewrap.cut svg.ink { opacity: .25; }
+  /* text typed on the page: looks like plain text, a dashed frame only on hover / while selected */
+  .ov.user { display: block; padding: 1px; border: 1px dashed transparent; border-radius: 2px; background: none; white-space: pre; line-height: 1.2; cursor: move; touch-action: none; }
+  .ov.user:hover { border-color: #9aa3b2; }
+  .ov.user.sel, .ov.user.editing { border-color: var(--focus); outline: none; }
+  .ov.user.editing { cursor: text; }
+  .ov.user.editing .t { visibility: hidden; }
+  .ut-edit { position: absolute; left: 1px; top: 1px; width: calc(100% - 2px); height: calc(100% - 2px); margin: 0; padding: 0; border: 0; border-radius: 0; outline: none; background: transparent; font: inherit; color: inherit; line-height: 1.2; white-space: pre; overflow: hidden; resize: none; }
+  .ov .tb { display: none; position: absolute; left: -2px; bottom: 100%; margin-bottom: 6px; gap: 4px; align-items: center; z-index: 7; padding: 4px 6px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 3px 12px rgba(0,0,0,.18); cursor: default; white-space: nowrap; }
+  .ov.user.sel .tb, .ov.user.editing .tb { display: flex; }
+  .ov .tb button { padding: 0 6px; font: 600 11.5px/20px "Segoe UI", system-ui, sans-serif; color: var(--ink); }
+  .ov .tb [data-color] { width: 16px; height: 16px; padding: 0; border-radius: 50%; background: var(--c); border: 2px solid #fff; box-shadow: 0 0 0 1px #b9c0cc; }
+  .ov .tb [data-color].on { box-shadow: 0 0 0 2px var(--focus); }
+  .ov .tb .sz { font: 12px "Segoe UI", system-ui, sans-serif; color: var(--ink); min-width: 18px; text-align: center; }
+  .ov .tb i { width: 1px; height: 16px; background: var(--line); }
   .ov-edit { position: absolute; z-index: 4; padding: 0 2px; border: 2px solid var(--focus); border-radius: 2px; font-family: Helvetica, Arial, sans-serif; color: #0a3d91; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
-  .ov-ghost { position: absolute; border: 1.5px dashed var(--focus); background: rgba(47,111,207,.08); pointer-events: none; }
   .pagewrap .pg-aff { padding: 0 6px; font-size: 11px; line-height: 16px; }
   .empty-preview { text-align: center; color: var(--muted); padding: 60px 20px; }
   .busy { position: fixed; inset: 0; background: rgba(255,255,255,.7); display: none; place-items: center; z-index: 50; font-size: 15px; }
@@ -128,7 +152,7 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v2.7 · 16 Oct 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v2.8 · 16 Oct 2026 · <b id="app-ready">Loading…</b></span>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
 
@@ -259,7 +283,7 @@
         <tbody></tbody>
       </table>
       <div class="hint">Only the affidavit page(s) are filled — letters, HIPAA authorizations and other forms are never changed. Signature and notary-signature lines stay blank on purpose.<br>
-        <b>Manual editing:</b> click any box on the preview to type in it. For a blank the tool missed, press <b>Add text</b> and click (or drag across) the spot — drag your box to move it, pull its right edge to resize, A−/A+ for the text size. If the affidavit page itself was not recognised, press <b>Edit this page</b> above it.</div>
+        <b>Edit by hand</b> (like Edge): click any box on the preview to type in it, or use <b>Add text</b> / <b>Draw</b> / <b>Erase</b> above the preview. If the affidavit page itself was not recognised, tick <b>All pages</b> and press <b>Edit this page</b> above it.</div>
     </div>
 
     <!-- 5. Output -->
@@ -287,9 +311,21 @@
     <div class="card" style="position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto">
       <div class="preview-bar">
         <b>Preview</b>
-        <span class="hint grow" style="margin:0">green = filled · red = empty · blue = your text · click a box to type · tick “All pages” to remove any page</span>
+        <span class="hint grow" style="margin:0">green = filled · red = empty · dashed = left blank · click a box to type · tick “All pages” to remove any page</span>
         <label class="sw"><input type="checkbox" id="pv-all"> All pages</label>
-        <button id="btn-add" title="Click on the page to place your own text">Add text</button>
+      </div>
+      <div class="edit-bar">
+        <button type="button" data-tool="text" title="Add text — click anywhere on the affidavit and type (Enter = new line)"><svg viewBox="0 0 20 20"><path d="M4 5V3.5h12V5M10 3.5v13M7.5 16.5h5"/></svg>Add text</button>
+        <button type="button" data-tool="draw" title="Draw — e.g. a tick, a line or a cross"><svg viewBox="0 0 20 20"><path d="M13.5 3.5l3 3L7 16H4v-3z M11.5 5.5l3 3"/></svg>Draw</button>
+        <button type="button" data-tool="erase" title="Erase — drag over a drawn line to remove it"><svg viewBox="0 0 20 20"><path d="M8 16.5h8.5M3.8 12.2l7.4-7.4a1.5 1.5 0 012.1 0l2.9 2.9a1.5 1.5 0 010 2.1L10 16.5H6.6l-2.8-2.8a1 1 0 010-1.5z M7.5 8.5l4.5 4.5"/></svg>Erase</button>
+        <span id="pen-opts" hidden>
+          <span class="sep"></span>
+          <button type="button" class="swatch on" data-pen="#000000" style="--c:#000000" title="Black"></button>
+          <button type="button" class="swatch" data-pen="#1f4fd1" style="--c:#1f4fd1" title="Blue"></button>
+          <button type="button" class="swatch" data-pen="#c0262d" style="--c:#c0262d" title="Red"></button>
+          <select id="pen-width" title="Thickness"><option value="1">Thin</option><option value="1.5" selected>Medium</option><option value="3">Thick</option></select>
+        </span>
+        <span class="hint" style="margin:0 0 0 auto">Ctrl+Z = undo · Esc = stop</span>
       </div>
       <div id="preview"><div class="empty-preview">The affidavit page(s) will appear here.</div></div>
     </div>
@@ -313,8 +349,8 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/engine.js?v=2.7"></script>
-<script src="js/ocr.js?v=2.7"></script>
-<script src="js/app.js?v=2.7"></script>
+<script src="js/engine.js?v=2.8"></script>
+<script src="js/ocr.js?v=2.8"></script>
+<script src="js/app.js?v=2.8"></script>
 </body>
 </html>

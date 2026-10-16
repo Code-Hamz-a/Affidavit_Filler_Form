@@ -1160,7 +1160,8 @@
   /*
    * opts = {
    *   requestBytes, keepPages: [1-based page numbers] | null (all),
-   *   fills: [{page, x, y, w, h, value, align, size?}],
+   *   fills: [{page, x, y, w, h, value, align}] | typed text [{page, x, y, free: true, size, color, value}],
+   *   ink: [{page, pts: [[x, y]…], width, color}],
    *   attachments: [{bytes, kind: 'pdf'|'jpg'|'png', pages?: [0-based page indexes]}],
    *   standard: null | {type, data, insertAfter}   // generated affidavit page
    * }
@@ -1193,6 +1194,16 @@
       page.drawRectangle({ x: wo.x, y: wo.y, width: wo.w, height: wo.h, color: rgb(1, 1, 1) });
     }
     for (const f of opts.fills || []) {
+      if (f.free) {
+        // text the user typed on the page: own size and colour, one line per Enter, never shrunk
+        const page = pages[f.page - 1];
+        if (!page) continue;
+        String(f.value || '').split('\n').forEach((line, i) => {
+          const v = safe(line);
+          if (v.trim()) page.drawText(v, { x: f.x, y: f.y + 1.5 - i * f.size * 1.2, size: f.size, font, color: f.color ? rgb(...f.color) : rgb(0, 0, 0) });
+        });
+        continue;
+      }
       const v = safe(f.value || '').trim();
       if (!v) continue;
       const page = pages[f.page - 1];
@@ -1202,14 +1213,21 @@
         const y0 = Math.max(f.cover.y0 - 1.5, f.y + 0.6);
         page.drawRectangle({ x: f.cover.x0 - 1, y: y0, width: f.cover.x1 - f.cover.x0 + 2, height: f.cover.y1 - y0 + 1, color: rgb(1, 1, 1) });
       }
-      // ≥ 8pt to start (or the size the user picked for their own text); shrinks below only to fit
-      let size = f.size || Math.min(11, Math.max(8, (f.h || 12) * 0.9));
+      let size = Math.min(f.size || 11, Math.max(8, (f.h || 12) * 0.9)); // ≥ 8pt to start; shrinks below only to fit
       const avail = Math.max(10, (f.w || 100) - 2);
       while (size > 6 && font.widthOfTextAtSize(v, size) > avail) size -= 0.5;
       const tw = font.widthOfTextAtSize(v, size);
       let x = f.x + 1;
       if (f.align === 'center' && tw < (f.w || 0)) x = f.x + ((f.w || 0) - tw) / 2;
       page.drawText(v, { x, y: f.y + 1.5, size, font, color: f.color ? rgb(...f.color) : rgb(0, 0, 0) });
+    }
+
+    // pen drawings: an SVG path is y-down, so the PDF y is negated (drawn from the page origin)
+    for (const k of opts.ink || []) {
+      const page = pages[k.page - 1];
+      if (!page || k.pts.length < 2) continue;
+      const path = k.pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(2)} ${(-p[1]).toFixed(2)}`).join(' ');
+      page.drawSvgPath(path, { x: 0, y: 0, borderColor: rgb(...k.color), borderWidth: k.width, borderLineCap: AE.PDFLib.LineCapStyle.Round });
     }
 
     if (opts.keepPages) {

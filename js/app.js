@@ -142,7 +142,8 @@
   let S;
   function resetState() {
     // userAff = pages the user unlocked for editing because the tool did not recognise them as the affidavit
-    S = { req: null, affPages: new Set(), userAff: new Set(), blanks: [], customs: [], atts: [], manual: {}, sel: null, adding: false, lastUrl: null, nextId: 1 };
+    // customs = text the user typed on the page, ink = pen strokes, tool = 'text' | 'draw' | 'erase' | null
+    S = { req: null, affPages: new Set(), userAff: new Set(), blanks: [], customs: [], ink: [], undo: [], atts: [], manual: {}, sel: null, tool: null, editing: null, lastUrl: null, nextId: 1 };
   }
   resetState();
   const toBlankRow = b => ({
@@ -199,7 +200,7 @@
       if (S.req && S.req.doc) S.req.doc.destroy();
       S.req = { name: file.name, bytes, doc: r.doc, pages: r.pages, info, cut: new Set(), allBlanks: blanks }; // cut = pages the user removed
       S.manual = {};
-      S.customs = [];
+      S.customs = []; S.ink = []; S.undo = [];
       S.userAff = new Set();
       S.affPages = new Set(r.pages.filter(p => AE.isAffidavitPage(p)).map(p => p.num));
       S.blanks = blanks.filter(b => b.pageHasAffidavit && S.affPages.has(b.page)).map(toBlankRow);
@@ -601,10 +602,6 @@
       }
       row.classList.toggle('off', !b.include);
     }
-    for (const b of S.customs) {
-      const inp = document.querySelector(`#blanks-table tr[data-b="${b.uid}"] input[type=text]`);
-      if (inp && document.activeElement !== inp) inp.value = shownValue(b);
-    }
     updateOverlays();
     renderMessages();
   }
@@ -614,51 +611,43 @@
 
   // ------------------------------------------------------------ blanks table
   function renderBlanksTable() {
-    const rows = [...S.blanks, ...S.customs].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
+    const rows = [...S.blanks].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
     $('#blanks-empty').style.display = rows.length ? 'none' : '';
     $('#blanks-table').style.display = rows.length ? '' : 'none';
     const kindOpts = sel => Object.entries(AE.KINDS).filter(([k]) => k !== 'custom')
       .map(([k, l]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(l)}</option>`).join('');
     $('#blanks-table tbody').innerHTML = rows.map(b => {
       const ctx = `…${b.prefix ? b.prefix.slice(-40) : ''} ____ ${b.suffix ? b.suffix.slice(0, 40) : ''}…`;
-      // b.user = a text box the user placed by hand; it can show own text or any field (patient name, DOS, …)
-      return `<tr data-b="${b.uid}" title="${esc(b.user ? 'Your own text box — drag it on the preview to move it' : ctx)}">
+      return `<tr data-b="${b.uid}" title="${esc(ctx)}">
         <td>${b.page}</td>
-        <td><select data-kind style="max-width:170px">${b.user ? `<option value="custom" ${b.kind === 'custom' ? 'selected' : ''}>Your own text</option>` : ''}${kindOpts(b.kind)}</select>
+        <td><select data-kind style="max-width:170px">${kindOpts(b.kind)}</select>
           ${b.question ? `<div class="q" title="${esc(b.question)}">${esc(b.question.length > 95 ? b.question.slice(0, 95) + '…' : b.question)}</div>` : ''}
           ${b.prefilled ? `<br><span class="pf badge b-warn" title="Something is already written on this blank. Ticked = cover it and write the new value.">already has “${esc(b.prefilled)}”</span>` : ''}</td>
-        <td><input type="text" value="${esc(shownValue(b))}" placeholder="${b.user ? 'type text' : ''}"></td>
-        <td>${b.user ? `<button class="icon" data-del title="Remove this text box">✕</button>` : `<input type="checkbox" ${b.include ? 'checked' : ''}>`}</td></tr>`;
+        <td><input type="text" value="${esc(blankValue(b))}"></td>
+        <td><input type="checkbox" ${b.include ? 'checked' : ''}></td></tr>`;
     }).join('');
 
     $$('#blanks-table tbody tr').forEach(tr => {
       const b = findBlank(tr.dataset.b);
       const inp = tr.querySelector('input[type=text]');
-      inp.addEventListener('input', () => { b.override = inp.value; if (!b.user && inp.value.trim()) { b.include = true; b.autoInclude = false; } refresh(); });
+      inp.addEventListener('input', () => { b.override = inp.value; if (inp.value.trim()) { b.include = true; b.autoInclude = false; } refresh(); });
       inp.addEventListener('focus', () => select(b.uid, false));
-      inp.addEventListener('change', () => { if (b.kind === 'answer') rememberAnswer(b, inp.value); });
+      if (b.kind === 'answer') inp.addEventListener('change', () => rememberAnswer(b, inp.value));
       const sel = tr.querySelector('select[data-kind]');
       sel.addEventListener('change', () => {
-        if (b.user) {
-          const cur = shownValue(b);
-          b.kind = sel.value; b.override = b.kind === 'custom' ? cur : null;
-        } else {
-          b.kind = sel.value; b.override = null;
-          b.include = !AE.SKIP_KINDS.has(b.kind) && !b.prefilled; b.autoInclude = true;
-        }
+        b.kind = sel.value; b.override = null;
+        b.include = !AE.SKIP_KINDS.has(b.kind) && !b.prefilled; b.autoInclude = true;
         renderBlanksTable(); refresh();
       });
       const cb = tr.querySelector('input[type=checkbox]');
-      if (cb) cb.addEventListener('change', () => { b.include = cb.checked; b.autoInclude = false; refresh(); });
-      const del = tr.querySelector('[data-del]');
-      if (del) del.addEventListener('click', () => deleteCustom(b));
+      cb.addEventListener('change', () => { b.include = cb.checked; b.autoInclude = false; refresh(); });
     });
   }
   const findBlank = uid => S.blanks.find(b => b.uid === uid) || S.customs.find(b => b.uid === uid);
   function deleteCustom(b) {
     S.customs = S.customs.filter(c => c !== b);
     if (S.sel === b.uid) S.sel = null;
-    renderBlanksTable(); renderOverlays(); refresh();
+    renderOverlays(); refresh();
   }
 
   function select(uid, focusInput) {
@@ -700,6 +689,9 @@
       const canvas = document.createElement('canvas');
       canvas.width = vp.width; canvas.height = vp.height;
       wrap.appendChild(canvas);
+      const ink = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); // pen drawings
+      ink.setAttribute('class', 'ink');
+      wrap.appendChild(ink);
       const del = wrap.querySelector('.pg-del');
       const showCut = () => { const c = S.req.cut.has(n); wrap.classList.toggle('cut', c); del.textContent = c ? 'Undo' : 'Remove page'; };
       del.addEventListener('click', e => {
@@ -710,65 +702,138 @@
       showCut();
       box.appendChild(wrap);
       await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-      pageViews.set(n, { wrap, vp: cssVp });
-      // "Add text": click on the page for a standard-width box, or drag across to make it as wide as the drag.
-      wrap.addEventListener('pointerdown', e => {
-        if (!S.adding || e.button !== 0 || e.target.closest('.ov, .ov-edit, button')) return;
-        if (!S.affPages.has(n)) {
-          alert('This page is locked: only the affidavit page(s) can be edited — authorization forms, letters and other pages stay exactly as they are.\n\nIf this IS the affidavit (or the deposition answer page), press “Edit this page” above it first.');
-          return;
-        }
-        e.preventDefault();
-        const r = wrap.getBoundingClientRect();
-        const x0 = e.clientX - r.left, y0 = e.clientY - r.top;
-        const ghost = document.createElement('div');
-        ghost.className = 'ov-ghost';
-        Object.assign(ghost.style, { left: x0 + 'px', top: (y0 - 9 * cssVp.scale) + 'px', width: '2px', height: (12 * cssVp.scale) + 'px' });
-        wrap.appendChild(ghost);
-        const move = ev => {
-          const x1 = ev.clientX - r.left;
-          ghost.style.left = Math.min(x0, x1) + 'px'; ghost.style.width = Math.max(2, Math.abs(x1 - x0)) + 'px';
-        };
-        const up = ev => {
-          window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
-          ghost.remove();
-          const x1 = ev.clientX - r.left, dragged = Math.abs(x1 - x0) > 12;
-          const [px, py] = cssVp.convertToPdfPoint(dragged ? Math.min(x0, x1) : x0, y0);
-          addCustom(n, px, py - 3, dragged ? Math.abs(x1 - x0) / cssVp.scale : 200);
-        };
-        window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
-      });
+      pageViews.set(n, { wrap, vp: cssVp, ink });
+      wrap.addEventListener('pointerdown', e => pagePointer(e, n));
     }
-    renderOverlays();
+    renderOverlays(); renderInk();
   }
   $('#pv-all').addEventListener('change', renderPreview);
   let resizeT;
   window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => S.req && renderPreview(), 300); });
 
-  function setAdding(on) {
-    S.adding = on;
-    $('#btn-add').classList.toggle('primary', on);
-    $('#btn-add').textContent = on ? 'Click or drag on the page…' : 'Add text';
-    $$('.pagewrap').forEach(w => w.classList.toggle('adding', on));
-  }
-  $('#btn-add').addEventListener('click', () => { if (!S.req) return alert('Load a request PDF first.'); setAdding(!S.adding); });
+  // ------------------------------------------------------------ editing tools (like the Edge PDF viewer)
+  const TEXT_COLORS = ['#000000', '#1f4fd1', '#c0262d'];
+  const PEN = { color: '#000000', width: 1.5 }; // width in PDF points
+  const TEXT_STYLE = { size: 11, color: '#000000' }; // last used, for the next text
+  const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+  const LOCKED_MSG = 'This page is locked: only the affidavit page(s) can be edited — authorization forms, letters and other pages stay exactly as they are.\n\nIf this IS the affidavit (or the deposition answer page), tick “All pages” and press “Edit this page” above it first.';
 
-  function addCustom(page, x, y, w) {
-    const c = { uid: 'c' + (S.nextId++), kind: 'custom', user: true, page, x, y, w: Math.max(30, w), h: 12, size: 10,
-      include: true, override: '', pageHasAffidavit: true, prefix: '', suffix: '' };
-    S.customs.push(c);
-    setAdding(false);
-    renderBlanksTable(); renderOverlays(); refresh();
-    editInline(c.uid);
+  function setTool(t) {
+    S.tool = t;
+    $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+    $('#pen-opts').hidden = t !== 'draw';
+    $('#preview').dataset.tool = t || '';
+  }
+  $$('[data-tool]').forEach(b => b.addEventListener('click', () => {
+    if (!S.req) return alert('Load a request PDF first.');
+    setTool(S.tool === b.dataset.tool ? null : b.dataset.tool);
+  }));
+  $$('[data-pen]').forEach(b => b.addEventListener('click', () => {
+    PEN.color = b.dataset.pen;
+    $$('[data-pen]').forEach(x => x.classList.toggle('on', x === b));
+  }));
+  $('#pen-width').addEventListener('change', () => { PEN.width = +$('#pen-width').value; });
+
+  // A click / drag on a page with a tool on: place text, draw, or erase.
+  function pagePointer(e, n) {
+    if (!S.tool || e.button !== 0 || e.target.closest('.ov, button')) return;
+    if (S.editing) { S.editing.blur(); return; } // the first click outside only finishes the text being typed
+    if (!S.affPages.has(n)) return alert(LOCKED_MSG);
+    e.preventDefault();
+    const pv = pageViews.get(n), r = pv.wrap.getBoundingClientRect();
+    const at = ev => pv.vp.convertToPdfPoint(ev.clientX - r.left, ev.clientY - r.top);
+    const track = (move, done) => {
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); done && done(); };
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    };
+    if (S.tool === 'text') {
+      const [px, py] = at(e);
+      addUserText(n, px, py);
+    } else if (S.tool === 'draw') {
+      const st = { page: n, color: PEN.color, width: PEN.width, pts: [at(e)] };
+      S.ink.push(st); S.undo.push({ ink: st });
+      renderInk(n);
+      track(ev => { st.pts.push(at(ev)); renderInk(n); }, () => {
+        if (st.pts.length === 1) st.pts.push([st.pts[0][0] + 0.2, st.pts[0][1]]); // a single click makes a dot
+        renderInk(n); refresh();
+      });
+    } else if (S.tool === 'erase') {
+      // removes every pen line the eraser touches (typed text is removed with its ✕ or the Delete key)
+      const rub = ev => {
+        const p = at(ev), tol = 6 / pv.vp.scale, before = S.ink.length;
+        S.ink = S.ink.filter(s => s.page !== n || !s.pts.some((q, i) => segDist(p, s.pts[Math.max(0, i - 1)], q) < tol + s.width / 2));
+        if (S.ink.length !== before) renderInk(n);
+      };
+      rub(e);
+      track(rub, refresh);
+    }
+  }
+  function segDist(p, a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+    const t = L ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L)) : 0;
+    return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+  }
+
+  function renderInk(only) {
+    for (const [n, pv] of pageViews) {
+      if (only && n !== only) continue;
+      pv.ink.innerHTML = S.ink.filter(k => k.page === n).map(k =>
+        `<polyline points="${k.pts.map(p => pv.vp.convertToViewportPoint(p[0], p[1]).map(v => v.toFixed(1)).join(',')).join(' ')}" stroke="${k.color}" stroke-width="${(k.width * pv.vp.scale).toFixed(2)}"/>`).join('');
+    }
+  }
+
+  // Typed text: x = left edge, y = baseline of the first line (PDF points). Enter makes a new line.
+  function addUserText(page, px, py) {
+    const c = { uid: 'c' + (S.nextId++), kind: 'custom', user: true, page, x: px, y: py - TEXT_STYLE.size * 0.35 - 1.5,
+      size: TEXT_STYLE.size, color: TEXT_STYLE.color, include: true, override: '', h: TEXT_STYLE.size, w: 0, prefix: '', suffix: '' };
+    S.customs.push(c); S.undo.push({ text: c });
+    renderOverlays();
+    editUserText(c, true);
+  }
+  function placeUser(ov, b, vp) {
+    const lines = (b.override || '').split('\n'), s = vp.scale;
+    const p = vp.convertToViewportPoint(b.x, b.y + 1.5 + b.size);
+    const w = Math.max(...lines.map(l => AE.textW(l, b.size))) + b.size; // a little room for the caret
+    Object.assign(ov.style, {
+      left: (p[0] - 2) + 'px', top: (p[1] - 2) + 'px', width: (w * s + 4) + 'px',
+      height: (lines.length * b.size * 1.2 * s + 4) + 'px', fontSize: (b.size * s) + 'px', color: b.color
+    });
+    const sz = ov.querySelector('.sz');
+    if (sz) sz.textContent = b.size;
+    ov.querySelectorAll('[data-color]').forEach(x => x.classList.toggle('on', x.dataset.color === b.color));
+  }
+  function editUserText(b, isNew) {
+    const ov = document.querySelector(`.ov[data-b="${b.uid}"]`), pv = pageViews.get(b.page);
+    if (!ov || !pv || ov.querySelector('.ut-edit')) return;
+    select(b.uid, false);
+    const ta = document.createElement('textarea');
+    ta.className = 'ut-edit'; ta.value = b.override || ''; ta.spellcheck = false;
+    ov.classList.add('editing'); ov.appendChild(ta);
+    S.editing = ta;
+    const before = b.override || '';
+    ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+    ta.addEventListener('input', () => { b.override = ta.value; placeUser(ov, b, pv.vp); });
+    ta.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { b.override = isNew ? '' : before; ta.blur(); }
+    });
+    ta.addEventListener('blur', () => {
+      if (S.editing !== ta) return;
+      S.editing = null;
+      ta.remove(); ov.classList.remove('editing');
+      if (!(b.override || '').trim()) return deleteCustom(b); // nothing typed
+      updateOverlays(); refresh();
+    });
   }
 
   // A page the tool did not recognise as the affidavit stays locked until the user unlocks it on purpose.
   async function toggleUserAff(n) {
     if (S.userAff.has(n)) {
-      const mine = S.customs.filter(c => c.page === n);
-      if (mine.length && !confirm(`Lock page ${n} again? The ${mine.length} text box(es) you added on it will be removed.`)) return;
+      const mine = S.customs.filter(c => c.page === n).length + S.ink.filter(k => k.page === n).length;
+      if (mine && !confirm(`Lock page ${n} again? The text and drawings you added on it will be removed.`)) return;
       S.userAff.delete(n); S.affPages.delete(n);
       S.customs = S.customs.filter(c => c.page !== n);
+      S.ink = S.ink.filter(k => k.page !== n);
       S.blanks = S.blanks.filter(b => b.page !== n);
     } else {
       if (!confirm(`Allow editing on page ${n}?\n\nOnly do this for the affidavit or the deposition (DWQ) answer page that the tool did not recognise.\nNever for a HIPAA authorization, letter or any other form.`)) return;
@@ -799,44 +864,51 @@
       ov.className = 'ov';
       ov.dataset.b = b.uid;
       ov.dataset.scale = pv.vp.scale;
-      ov.innerHTML = '<span class="t"></span>' + (b.user ? '<span class="rs" title="Drag to make the box wider / narrower"></span>' +
-        '<span class="tb"><button type="button" data-a="-" title="Smaller text">A−</button><button type="button" data-a="+" title="Bigger text">A+</button>' +
-        '<button type="button" data-a="x" title="Remove this text box">✕</button></span>' : '');
-      placeOverlay(ov, b, pv.vp);
-      // Your own text boxes can be dragged to move them (or resized from the right edge); a plain click types in any box.
+      ov.innerHTML = '<span class="t"></span>' + (b.user ? '<span class="tb">' +
+        TEXT_COLORS.map(c => `<button type="button" data-color="${c}" style="--c:${c}" title="Text colour"></button>`).join('') +
+        '<i></i><button type="button" data-a="-" title="Smaller text">A−</button><span class="sz"></span><button type="button" data-a="+" title="Bigger text">A+</button>' +
+        '<i></i><button type="button" data-a="x" title="Delete this text">✕</button></span>' : '');
+      if (b.user) placeUser(ov, b, pv.vp); else placeOverlay(ov, b, pv.vp);
+      if (b.user) {
+        // the small toolbar must not take the focus away from the text being typed
+        const tb = ov.querySelector('.tb');
+        tb.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); });
+        tb.addEventListener('click', e => {
+          e.stopPropagation();
+          const btn = e.target.closest('button');
+          if (!btn) return;
+          if (btn.dataset.a === 'x') { if (S.editing) { S.editing = null; } return deleteCustom(b); }
+          if (btn.dataset.color) b.color = btn.dataset.color;
+          if (btn.dataset.a) b.size = Math.min(36, Math.max(6, b.size + (btn.dataset.a === '+' ? 1 : -1)));
+          TEXT_STYLE.size = b.size; TEXT_STYLE.color = b.color;
+          placeUser(ov, b, pv.vp);
+        });
+      }
+      // Your own text is moved by dragging it; a plain click types in any box.
       ov.addEventListener('pointerdown', e => {
         e.stopPropagation();
-        if (!b.user || e.button !== 0 || e.target.closest('[data-a]')) return;
+        if (!b.user || e.button !== 0 || e.target.closest('.ut-edit')) return;
         e.preventDefault();
         select(b.uid, false);
-        const resizing = !!e.target.closest('.rs');
         const r = pv.wrap.getBoundingClientRect();
         const start = pv.vp.convertToPdfPoint(e.clientX - r.left, e.clientY - r.top);
-        const orig = { x: b.x, y: b.y, w: b.w };
+        const orig = { x: b.x, y: b.y };
         ov.moved = false;
         const move = ev => {
           if (!ov.moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 3) return;
           ov.moved = true;
           const pt = pv.vp.convertToPdfPoint(ev.clientX - r.left, ev.clientY - r.top);
-          if (resizing) b.w = Math.max(30, orig.w + pt[0] - start[0]);
-          else { b.x = orig.x + pt[0] - start[0]; b.y = orig.y + pt[1] - start[1]; }
-          placeOverlay(ov, b, pv.vp); updateOverlays();
+          b.x = orig.x + pt[0] - start[0]; b.y = orig.y + pt[1] - start[1];
+          placeUser(ov, b, pv.vp);
         };
         const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
         window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
       });
       ov.addEventListener('click', e => {
         e.stopPropagation();
-        const act = e.target.closest('[data-a]');
-        if (act) {
-          if (act.dataset.a === 'x') return deleteCustom(b);
-          b.size = Math.min(24, Math.max(6, b.size + (act.dataset.a === '+' ? 1 : -1)));
-          b.h = b.size + 2;
-          placeOverlay(ov, b, pv.vp); updateOverlays();
-          return;
-        }
+        if (e.target.closest('.tb, .ut-edit')) return;
         if (ov.moved) { ov.moved = false; return; }
-        editInline(b.uid);
+        if (b.user) editUserText(b, false); else editInline(b.uid);
       });
       pv.wrap.appendChild(ov);
     }
@@ -848,16 +920,21 @@
       if (!b) continue;
       const v = shownValue(b);
       ov.querySelector('.t').textContent = b.include ? v : '';
-      // Same sizing as the PDF: up to 11pt (or the size picked for your own text), shrunk (down to 6pt) until the value fits.
-      let size = b.size || Math.min(11, Math.max(8, b.h * 0.9));
+      if (b.user) {
+        ov.className = 'ov user' + (S.sel === b.uid ? ' sel' : '') + (ov.querySelector('.ut-edit') ? ' editing' : '');
+        ov.title = 'Click to type · drag to move';
+        continue;
+      }
+      // Same sizing as the PDF: up to 11pt, shrunk (down to 6pt) until the value fits.
+      let size = Math.min(11, Math.max(8, b.h * 0.9));
       while (size > 6 && AE.textW(v.trim(), size) > b.w - 2) size -= 0.5;
       ov.style.fontSize = (size * (+ov.dataset.scale || 1)) + 'px';
-      ov.className = 'ov ' + (!b.include ? 'skip' : v.trim() ? 'fill' : 'empty') + (b.user ? ' user' : '') + (S.sel === b.uid ? ' sel' : '');
-      ov.title = b.user ? 'Your text — click to type, drag to move' : `${AE.KINDS[b.kind] || b.kind}${v ? ': ' + v : ''} — click to type`;
+      ov.className = 'ov ' + (!b.include ? 'skip' : v.trim() ? 'fill' : 'empty') + (S.sel === b.uid ? ' sel' : '');
+      ov.title = `${AE.KINDS[b.kind] || b.kind}${v ? ': ' + v : ''} — click to type`;
     }
   }
 
-  // Type straight into a box on the preview. Enter / clicking elsewhere keeps it, Esc undoes.
+  // Type straight into a detected blank on the preview. Enter / clicking elsewhere keeps it, Esc undoes.
   function editInline(uid) {
     const b = findBlank(uid), ov = document.querySelector(`.ov[data-b="${uid}"]`);
     if (!b || !ov) return;
@@ -876,7 +953,7 @@
     let done = false;
     inp.addEventListener('input', () => {
       b.override = inp.value;
-      if (!b.user && inp.value.trim()) { b.include = true; b.autoInclude = false; }
+      if (inp.value.trim()) { b.include = true; b.autoInclude = false; }
       refresh();
     });
     inp.addEventListener('keydown', e => {
@@ -888,16 +965,24 @@
       if (done) return;
       done = true;
       inp.remove();
-      if (b.user && b.kind === 'custom' && !(b.override || '').trim()) return deleteCustom(b); // nothing typed
       if (b.kind === 'answer') rememberAnswer(b, shownValue(b));
       refresh();
     });
   }
 
-  // Esc leaves "Add text"; Delete removes the selected text box of your own; arrow keys nudge it (Shift = bigger steps).
+  // Esc leaves the tool; Ctrl+Z takes back the last text / pen line; Delete removes the selected text; arrows nudge it.
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && S.adding) return setAdding(false);
+    if (e.key === 'Escape' && S.tool) return setTool(null);
     if (e.target.closest('input, textarea, select')) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      while (S.undo.length) {
+        const u = S.undo.pop();
+        if (u.ink && S.ink.includes(u.ink)) { S.ink = S.ink.filter(k => k !== u.ink); renderInk(); refresh(); break; }
+        if (u.text && S.customs.includes(u.text)) { deleteCustom(u.text); break; }
+      }
+      e.preventDefault();
+      return;
+    }
     const b = S.sel && S.customs.find(c => c.uid === S.sel);
     if (!b) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return deleteCustom(b); }
@@ -907,7 +992,7 @@
     e.preventDefault();
     b.x += d[0]; b.y += d[1];
     const pv = pageViews.get(b.page), ov = document.querySelector(`.ov[data-b="${b.uid}"]`);
-    if (pv && ov) placeOverlay(ov, b, pv.vp);
+    if (pv && ov) placeUser(ov, b, pv.vp);
   });
   // Clicking anywhere else drops the selection, so the arrow keys scroll the page again.
   document.addEventListener('pointerdown', e => {
@@ -1014,19 +1099,22 @@
     try {
       const d = caseData();
       const billing = type() === 'billing';
-      const fills = [...S.blanks.filter(b => b.include), ...S.customs].filter(b => S.affPages.has(b.page)).map(b => ({
-        page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, size: b.user ? b.size : undefined, cover: b.prefilled ? b.prefilledBox : null,
-        value: shownValue(b),
-        align: /^(pages|notary_day|notary_year2|notary_year4)$/.test(b.kind) ? 'center' : 'left'
-      }));
+      const fills = [...S.blanks.filter(b => b.include), ...S.customs].filter(b => S.affPages.has(b.page)).map(b => b.user
+        ? { page: b.page, x: b.x, y: b.y, free: true, size: b.size, color: hexRgb(b.color), value: b.override || '' }
+        : {
+          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null,
+          value: shownValue(b),
+          align: /^(pages|notary_day|notary_year2|notary_year4)$/.test(b.kind) ? 'center' : 'left'
+        });
+      const ink = S.ink.filter(k => S.affPages.has(k.page)).map(k => ({ page: k.page, pts: k.pts, width: k.width, color: hexRgb(k.color) }));
       const plan = outputPlan();
       const keepPages = plan.keepPages, attachments = plan.attachments;
       const standard = plan.standard ? { type: billing ? 'billing' : 'records', data: d, insertAt: plan.stdAt } : null;
 
       // white-out annotations on the affidavit pages we write on (see AE.buildPdf)
-      const filledPages = new Set(fills.filter(f => (f.value || '').trim()).map(f => f.page));
+      const filledPages = new Set([...fills.filter(f => (f.value || '').trim()).map(f => f.page), ...ink.map(k => k.page)]);
       const whiteouts = S.req ? S.req.pages.filter(p => filledPages.has(p.num)).flatMap(p => (p.whiteouts || []).map(w => ({ ...w, page: p.num }))) : [];
-      const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, attachments, standard, whiteouts });
+      const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, ink, attachments, standard, whiteouts });
       let name = val('f-filename') || AE.fileName(d.patient, type());
       if (!/\.pdf$/i.test(name)) name += '.pdf';
       name = name.replace(/[\\/:*?"<>|]+/g, '');
@@ -1062,7 +1150,7 @@
     $('#f-standard').checked = false; $('#btn-open').disabled = true; $('#out-info').textContent = '';
     $$('input[name=type]').forEach(r => { r.checked = r.value === 'records'; });
     renderAttachments(); renderBlanksTable(); renderPreview(); refresh();
-    setAdding(false);
+    setTool(null);
   });
 
   renderAttachments();
