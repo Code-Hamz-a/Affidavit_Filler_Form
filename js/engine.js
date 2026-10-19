@@ -959,6 +959,22 @@
   // ---------------------------------------------------- invoice parsing
   // CMS-1500 box 24 service line: "09 04 25 09 04 25 21 99223 ..." (from, to, place of service)
   const CMS_LINE = /\b(0[1-9]|1[0-2]) (0[1-9]|[12]\d|3[01]) \d{2} (0[1-9]|1[0-2]) (0[1-9]|[12]\d|3[01]) \d{2} \d{2}\b/;
+  // UB-04 printed as data only (the red form and its labels are just a picture): revenue-code lines
+  // "0250 Pharmacy 032226 8 626.23" and the line-23 totals row "0001 2 2 040626 146646.78" (page 2 of 2, creation date, total).
+  const UB_REV_LINE = /^(?:\d{1,2}\s+)?0\d{3}\s+[A-Za-z].*\s\d{6}(?:\d{2})?\s+\d+\s+[\d,]+(?:\.\d{2})?$/gm;
+  const UB_TOTAL_LINE = /^(?:\d{1,2}\s+)?0001\s+(\d{1,2})\s+(\d{1,2})\s+\d{6}(?:\d{2})?(?:\s+([\d,]+)(?:\.(\d{2})|\s+(\d{2})\b)?)?/;
+  const isUb04 = t => /UB-?04|CMS-?1450|NUBC/i.test(t) || t.split('\n').some(l => UB_TOTAL_LINE.test(l)) ||
+    (t.match(UB_REV_LINE) || []).length >= 2;
+  // "Page n of m" of a UB-04 page: printed "PAGE 1 OF 2", or on a data-only print just "1 2 040626" / "0001 2 2 040626 …"
+  function ubPageOf(lines) {
+    const m = lines.map(l => l.text).join(' ').match(/PAGE\s+(\d+)\s+OF\s+(\d+)/i);
+    if (m) return [+m[1], +m[2]];
+    for (const l of lines) {
+      const d = l.text.match(/^(?:\d{1,2}\s+)?(?:0001\s+)?(\d{1,2})\s+(\d{1,2})\s+\d{6}(?:\d{2})?(?:\s+[\d,.\s]+)?$/);
+      if (d && +d[1] >= 1 && +d[1] <= +d[2]) return [+d[1], +d[2]];
+    }
+    return null;
+  }
   // Returns { format, dates: [Date], from, to, total, nameOk, dobOk, notes: [] }
   AE.parseInvoice = function (pages, ctx) {
     ctx = ctx || {};
@@ -968,14 +984,14 @@
     const dobDate = AE.parseDate(ctx.dob);
     const isDob = d => dobDate && d.getTime() === dobDate.getTime();
 
-    if (/UB-?04|CMS-?1450|NUBC/i.test(all)) {
+    if (isUb04(all)) {
       res.format = 'UB-04';
       let lastTotal = null;
       for (const p of pages) {
         const lines = AE.pageLines(p);
         let period = null;
         for (const l of lines) {
-          const m = l.text.match(/\b\d{2}-?\d{7}\s+(\d{6})\s+(\d{6})\b/);
+          const m = l.text.match(/\b\d{2}-?\d{7}\s+(\d{6}(?:\d{2})?)\s+(\d{6}(?:\d{2})?)\b/);
           if (m) { period = [AE.parseDate(m[1]), AE.parseDate(m[2])]; break; }
         }
         if (period && period[0]) res.dates.push(...period.filter(Boolean));
@@ -983,7 +999,7 @@
         // Lines may start with the form's printed row number ("3 0460 ...").
         for (const l of lines) {
           if (!/^(\d{1,2}\s+)?0\d{3}\b/.test(l.text) || /^(\d{1,2}\s+)?0001\b/.test(l.text)) continue;
-          const dm = l.text.match(/\b(\d{6})\b(?!\d)/g);
+          const dm = l.text.match(/\b(\d{6}(?:\d{2})?)\b(?!\d)/g);
           if (dm && !period) dm.map(AE.parseDate).filter(Boolean).forEach(d => res.dates.push(d));
         }
         // Totals row = form line 23: "0001 PAGE 1 OF 1 CREATION DATE 042226 TOTALS 7388 20 0 00"
@@ -991,15 +1007,19 @@
         if (tl) {
           let v = null;
           const tm = tl.text.match(/\bTOTALS\s+([\d,]+)(?:\.(\d{2})|\s+(\d{2})\b)?/);
+          const dm = tl.text.match(UB_TOTAL_LINE);
           if (tm) v = AE.parseMoney(tm[1]) + (+(tm[2] || tm[3] || 0)) / 100;
-          else {
+          else if (dm && dm[3]) {
+            // Data-only print: "146646.78", "7388 20", or "217340" (the form's dotted line splits off the cents)
+            v = dm[4] || dm[5] ? AE.parseMoney(dm[3]) + (+(dm[4] || dm[5])) / 100 : AE.parseMoney(dm[3]) / 100;
+          } else {
             const nums = tl.items.filter(it => it.x > p.width * 0.66 && /^[\d,]+(\.\d{2})?$/.test(it.str.trim())).map(it => it.str.trim());
             if (nums.length) v = /\./.test(nums[0]) ? AE.parseMoney(nums[0])
               : AE.parseMoney(nums[0]) + (nums[1] && /^\d{2}$/.test(nums[1]) ? +nums[1] / 100 : 0);
           }
-          const pg = tl.text.match(/PAGE\s+(\d+)\s+OF\s+(\d+)/i);
+          const pg = ubPageOf([tl]);
           // On multi-page claims the total sits on the last page ("PAGE 2 OF 2").
-          if (v != null && (!pg || pg[1] === pg[2])) lastTotal = (lastTotal || 0) + v;
+          if (v != null && (!pg || pg[0] === pg[1])) lastTotal = (lastTotal || 0) + v;
         }
       }
       res.total = lastTotal;
@@ -1104,7 +1124,7 @@
   // Splits a file of UB-04s into claims (each ends on "PAGE n OF n"). Returns arrays of pages.
   AE.splitClaims = function (pages) {
     const txt = AE.fullText(pages);
-    if (!/UB-?04|CMS-?1450|NUBC/i.test(txt)) {
+    if (!isUb04(txt)) {
       // CMS-1500: every form page carries its own box 28 total → one claim per page
       const perPage = pages.map(p => AE.fullText([p]));
       if (pages.length > 1 && perPage.every(t => CMS_LINE.test(t))) return pages.map(p => [p]);
@@ -1113,8 +1133,8 @@
     const groups = []; let cur = [];
     for (const p of pages) {
       cur.push(p);
-      const m = AE.pageLines(p).map(l => l.text).join(' ').match(/PAGE\s+(\d+)\s+OF\s+(\d+)/i);
-      if (!m || m[1] === m[2]) { groups.push(cur); cur = []; }
+      const m = ubPageOf(AE.pageLines(p));
+      if (!m || m[0] === m[1]) { groups.push(cur); cur = []; }
     }
     if (cur.length) groups.push(cur);
     return groups;
