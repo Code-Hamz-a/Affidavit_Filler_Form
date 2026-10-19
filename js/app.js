@@ -360,7 +360,9 @@
     try {
       doc = await pdfjsLib.getDocument({ data: a.bytes.slice(0), isEvalSupported: false }).promise;
       for (let k = 0; k < need.length; k++) {
-        busy(true, `${a.name}: invoice text is unreadable — reading it with OCR, page ${k + 1} of ${need.length}…`);
+        const direct = a.pages.length - need.length;
+        busy(true, `${a.name}: ${need.length} of ${a.pages.length} invoice pages have unreadable text — reading them with OCR, ${k + 1} of ${need.length}…` +
+          (direct ? ` (the other ${direct} page${direct > 1 ? 's are' : ' is'} read directly)` : ''));
         await new Promise(res => setTimeout(res, 30)); // let the message show
         need[k].items = (await ocrPage(doc, need[k].num, 3.5, true)).items;
         need[k].ocr = true; need[k]._lines = null;
