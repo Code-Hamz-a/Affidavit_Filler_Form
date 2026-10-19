@@ -1012,13 +1012,19 @@
       }
     } else if (/HEALTH INSURANCE CLAIM FORM|CMS-?1500|\(02\/12\)/i.test(all) || CMS_LINE.test(all)) {
       res.format = 'CMS-1500';
-      // Box 25-29: "824094685 X 1918129V13131 X 1000 00 0 00 1000 00" → total charge, amount paid
-      let tot = null, paid = null;
+      // Box 25-29: "824094685 X 1918129V13131 X 1000 00 0 00 1000 00" (or "… X 2025.80 0.00") → total charge, amount paid
+      let tot = null, paid = null, lineSum = null;
       for (const p of pages) for (const l of AE.pageLines(p)) {
-        const m = l.text.match(/\b\d{2}-?\d{7}\s+X?\s*\S+\s+X?\s*([\d,]+)\s+(\d{2})\s+([\d,]+)\s+(\d{2})\b/);
+        const m = l.text.match(/\b\d{2}-?\d{7}\s+X?\s*\S+\s+X?\s*([\d,]+)[.\s](\d{2})\s+([\d,]+)[.\s](\d{2})\b/);
         if (m) { tot = (tot || 0) + AE.parseMoney(m[1]) + (+m[2]) / 100; paid = (paid || 0) + AE.parseMoney(m[3]) + (+m[4]) / 100; }
+        // Box 24F on each service line: "05 11 26 05 11 26 10 99214 25 95 F4311 1282.10 1 1164205415" → charge before the units
+        if (CMS_LINE.test(l.text)) {
+          const c = l.text.replace(CMS_LINE, ' ').match(/\s([\d,]+)[.\s](\d{2})\s+\d{1,3}(?=\s+(?:NPI\s+)?\d{10}\b|\s*$)/);
+          if (c) lineSum = (lineSum || 0) + AE.parseMoney(c[1]) + (+c[2]) / 100;
+        }
       }
       if (tot != null) { res.total = tot; res.paid = paid; }
+      else if (lineSum != null) { res.total = Math.round(lineSum * 100) / 100; res.notes.push('Box 28 total is empty — total = sum of the service-line charges.'); }
       const bd = all.match(/[A-Z]{2,}\s+(\d{2})\s(\d{2})\s(\d{4})\b/);
       const bdt = bd && AE.parseDate(`${bd[1]}/${bd[2]}/${bd[3]}`);
       if (bdt) { res.dob = AE.fmtDate(bdt); if (dobDate) res.dobOk = bdt.getTime() === dobDate.getTime(); }

@@ -249,6 +249,7 @@
         (affBlanks.length ? '' : `<br><span class="badge b-warn">No fill-in blanks found (scanned or no affidavit) — use “Add text” on the preview (press “Edit this page” first if the affidavit page is locked) or the standard affidavit page.</span>`);
       $('#req-range').textContent = info.reqFrom ? `Requested: ${info.reqFrom} to ${info.reqTo || '?'}${info.doi ? ` · Date of injury ${info.doi}` : ''}` : '';
 
+      if (info.type === 'billing') for (const a of S.atts) await readScrambledInvoices(a); // invoices added before the request
       analyzeAttachments(true);
       renderBlanksTable();
       await renderPreview();
@@ -259,6 +260,38 @@
     } finally { busy(false); }
   }
 
+  // Renders one page and reads its words with the built-in OCR; the words come back as text items in PDF points.
+  // inkOnly keeps only near-black ink: a claim form printed in red or grey (CMS-1500, UB-04) turns white
+  // and only the typed values stay, which the OCR reads far more reliably.
+  async function ocrPage(doc, num, scale, inkOnly) {
+    const page = await doc.getPage(num);
+    const vp = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    let img = canvas;
+    if (inkOnly) {
+      img = document.createElement('canvas');
+      img.width = canvas.width; img.height = canvas.height;
+      const im = ctx.getImageData(0, 0, canvas.width, canvas.height), d = im.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = Math.max(d[i], d[i + 1], d[i + 2]); // red / grey form → light, black typing → dark
+        d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, (v - 60) * 255 / 90));
+      }
+      img.getContext('2d').putImageData(im, 0, 0);
+    }
+    const words = await window.OCR.readCanvas(img);
+    const items = words.map(wd => {
+      const [xa, ya] = vp.convertToPdfPoint(wd.left, wd.lineBottom);
+      const [xb, yb] = vp.convertToPdfPoint(wd.left + wd.width, wd.lineTop);
+      const lineH = Math.abs(yb - ya);
+      return { str: wd.text, x: Math.min(xa, xb), y: Math.min(ya, yb) + lineH * 0.2, w: Math.abs(xb - xa), h: Math.min(Math.max(lineH * 0.8, 6), 16), font: 'ocr' };
+    });
+    return { items, vp, canvas, ctx };
+  }
+
   // Scanned pages (only a picture, no text) are read with the built-in OCR so their blanks can be found.
   async function ocrScannedPages(r) {
     const scanned = r.pages.filter(p => p.items.length < 5);
@@ -267,22 +300,11 @@
       const p = scanned[k];
       busy(true, `Scanned PDF — reading the text (OCR), page ${k + 1} of ${scanned.length}…` + (k === 0 ? ' (first page takes a few seconds longer)' : ''));
       await new Promise(res => setTimeout(res, 30)); // let the message show
-      const page = await r.doc.getPage(p.num);
-      const vp = page.getViewport({ scale: 2.6 });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      let words;
-      try { words = await window.OCR.readCanvas(canvas); }
+      let o;
+      try { o = await ocrPage(r.doc, p.num, 2.6, false); }
       catch (e) { console.error(e); alert('OCR could not read the scanned pages: ' + e.message); return 0; }
-      p.items = words.map(wd => {
-        const [xa, ya] = vp.convertToPdfPoint(wd.left, wd.lineBottom);
-        const [xb, yb] = vp.convertToPdfPoint(wd.left + wd.width, wd.lineTop);
-        const lineH = Math.abs(yb - ya);
-        return { str: wd.text, x: Math.min(xa, xb), y: Math.min(ya, yb) + lineH * 0.2, w: Math.abs(xb - xa), h: Math.min(Math.max(lineH * 0.8, 6), 16), font: 'ocr' };
-      });
+      const { vp, canvas, ctx } = o;
+      p.items = o.items;
       // The blanks on a scan are drawn lines in the picture — find them in the pixels.
       const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       const gray = new Uint8Array(canvas.width * canvas.height);
@@ -322,10 +344,37 @@
         else if (ext === 'png') att.kind = 'png';
         else { alert(`${file.name}: only PDF, JPG and PNG files can be attached.`); continue; }
         S.atts.push(att);
+        if (type() === 'billing') await readScrambledInvoices(att);
       }
       analyzeAttachments(false);
       refresh();
     } finally { busy(false); }
+  }
+
+  // Some invoices (e.g. CareCapital CMS-1500s) look fine but their text is a scrambled font, or they are scans.
+  // Those pages are read with the OCR instead, with the printed form taken out so only the typed values remain.
+  async function readScrambledInvoices(a) {
+    const need = a.kind === 'pdf' ? a.pages.filter(p => !p.ocr && AE.readableShare([p]) < 0.6) : [];
+    if (!need.length) return;
+    let doc;
+    try {
+      doc = await pdfjsLib.getDocument({ data: a.bytes.slice(0), isEvalSupported: false }).promise;
+      for (let k = 0; k < need.length; k++) {
+        busy(true, `${a.name}: invoice text is unreadable — reading it with OCR, page ${k + 1} of ${need.length}…`);
+        await new Promise(res => setTimeout(res, 30)); // let the message show
+        need[k].items = (await ocrPage(doc, need[k].num, 3.5, true)).items;
+        need[k].ocr = true; need[k]._lines = null;
+      }
+      a.ocr = (a.ocr || 0) + need.length;
+      a.units = null; // split and read the claims again
+    } catch (e) {
+      console.error(e);
+      alert(`OCR could not read ${a.name}: ${e.message}\nType the DOS and totals in the invoice table.`);
+    } finally { if (doc) doc.destroy(); }
+  }
+  async function ocrBillingFiles() {
+    if (type() !== 'billing') return;
+    try { for (const a of S.atts) await readScrambledInvoices(a); } finally { busy(false); }
   }
 
   // Splits invoices into claims and parses each one (DOS + totals). Keeps any values typed by the user.
@@ -380,7 +429,7 @@
         : '<span class="badge b-mute" title="Scanned/image — check the patient by eye">no text</span>';
       return `<div class="file">
         <span class="name" title="${esc(a.name)}">${i + 1}. ${esc(a.name)}</span>
-        <span class="badge b-mute">${keptCount(a)} pg</span>${chk}${a.removed && a.removed.length ? `<span class="badge b-mute" title="CareCapital cover letter (page ${a.removed.join(', ')}) left out">CareCapital page removed</span>` : ''}${a.cut && a.cut.size ? `<span class="badge b-warn" title="Pages you removed: ${[...a.cut].sort((x, y) => x - y).map(i => i + 1).join(', ')}">${a.cut.size} removed</span>` : ''}
+        <span class="badge b-mute">${keptCount(a)} pg</span>${chk}${a.removed && a.removed.length ? `<span class="badge b-mute" title="CareCapital cover letter (page ${a.removed.join(', ')}) left out">CareCapital page${a.removed.length > 1 ? `s (${a.removed.length})` : ''} removed</span>` : ''}${a.ocr ? `<span class="badge b-warn" title="${a.ocr} page(s) had unreadable text and were read with OCR — check the DOS and totals">read with OCR</span>` : ''}${a.cut && a.cut.size ? `<span class="badge b-warn" title="Pages you removed: ${[...a.cut].sort((x, y) => x - y).map(i => i + 1).join(', ')}">${a.cut.size} removed</span>` : ''}
         ${a.kind === 'pdf' ? `<button class="icon" data-pg="${a.id}" title="Choose which pages go into the PDF">Pages</button>` : ''}
         <button class="icon" data-mv="${a.id}" data-d="-1" title="Move up">▲</button>
         <button class="icon" data-mv="${a.id}" data-d="1" title="Move down">▼</button>
@@ -429,7 +478,9 @@
     }));
   }
   $('#f-sort').addEventListener('change', () => { renderAttachments(); refresh(); });
-  $$('input[name=type]').forEach(r => r.addEventListener('change', () => { renderAttachments(); refresh(); }));
+  $$('input[name=type]').forEach(r => r.addEventListener('change', async () => {
+    await ocrBillingFiles(); analyzeAttachments(false); renderAttachments(); refresh();
+  }));
 
   // ------------------------------------------------------------ derived values
   // Page picker for a record / invoice file: click a thumbnail to leave that page out of the PDF.

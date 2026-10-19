@@ -31,7 +31,8 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
    - Records: the page count is filled in automatically.
    - Billing: each UB-04 claim is read separately. The first DOS, last DOS and total charges come from the invoices. The DOB is taken from the UB-04 if the letter doesn't include it. The invoices are merged in DOS order.
    - **CareCapital cover letters** ("CareCapital & Record Service purchased and is the rightful owner…") are taken out automatically. Only the invoices and records themselves are merged.
-   - Some invoices use a scrambled font, so the tool cannot read their text (for example CareCapital CMS-1500s). For those, type the DOS and total in the invoice table.
+   - Some invoices look fine but their text is a scrambled font, for example CareCapital CMS-1500s. Billing mode reads those pages with the built-in OCR automatically, taking about 3 seconds per page. Before reading, it removes the printed red or grey claim form so only the typed values are left. The file then shows a **read with OCR** badge, so check the DOS and totals.
+   - If a CMS-1500's box 28 (Total charge) is empty, the total is the sum of the service-line charges in box 24F. The invoice row shows a "!" note when this happens.
    - The patient name and DOB are checked on every file. A mismatch warns you before the PDF is created.
 5. **Affidavit blanks**: each blank is detected and filled from the details above.
    - If a blank already has a **wrong** DOS, page count or amount, the old value is whited out and replaced.
