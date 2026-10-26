@@ -47,6 +47,9 @@
     custodian_title: 'Name + title',
     employer_address: 'Employer + business address',
     amt_ins_paid: '$ Paid by insurance',
+    amt_payor_paid: '$ Paid by insurance / Medicaid / Medicare',
+    amt_collection: '$ Turned over for collection',
+    amt_payor_owing: '$ Owed by insurance / Medicaid / Medicare',
     amt_med_paid: '$ Paid by Medicare/Medicaid',
     amt_pt_paid: '$ Paid by patient',
     amt_adjust: '$ Contractual adjustments',
@@ -577,15 +580,23 @@
       const lab = preL.replace(/\$\s*$/, '').replace(/^\(?[a-e][.)]\s*/, '');
       const kind = src => {
         if (/plus|item c|c\s*\+\s*d/.test(src)) return 'amt_paid_plus_balance';
+        if (/turned over|collection/.test(src)) return 'amt_collection';
+        // who still owes / who paid: the patient vs. insurance, Medicaid, Medicare or another payor
+        if (/(owing|owed|owes|due)\b.*\b(insur|medicaid|medicare|payor|payer)/.test(src)) return 'amt_payor_owing';
+        if (/(owing|owed|owes)\b.*\b(patient|plaintiff|claimant|guarantor)/.test(src)) return 'amt_balance';
+        if (/paid by (the )?(patient|plaintiff|claimant|guarantor)/.test(src)) return 'amt_pt_paid';
+        if (/paid by .*(insur|medicaid|medicare|payor|payer)/.test(src)) return 'amt_payor_paid';
         if (/written off|write[- ]?off|discount/.test(src)) return 'amt_writeoff';
-        if (/unpaid|right to be paid|outstanding|balance|legally entitled|due/.test(src)) return 'amt_balance';
+        if (/unpaid|right to be paid|outstanding|balance|legally entitled|due|remains owing|still owing/.test(src)) return 'amt_balance';
         if (/amount paid|been paid|paid for|payments?\b/.test(src)) return 'amt_paid';
         if (/total amount|billed|charged|charges/.test(src)) return 'amt_total';
         return null;
       };
       // the clause right before "$": "…currently unpaid but which ___ has a right to be paid after any adjustments or credits is $"
       const clause = (b.prevLine + ' ' + preL).toLowerCase().split(/[.;]\s/).pop();
-      return (hasWords(lab) && kind(lab)) || kind(clause) || kind(after) || 'amt_total';
+      // "$____ was paid by the patient;" / "$____ remains owing by…" — the words after the blank say what it is
+      const afterFirst = /^\s*(was|were|is|are|remains?|has been|have been)\b/.test(sufL);
+      return (hasWords(lab) && kind(lab)) || (afterFirst && kind(after)) || kind(clause) || kind(after) || 'amt_total';
     }
 
     // Deposition on written questions: "ANSWER: ______" → decide from the question above it.
@@ -644,10 +655,13 @@
     if (/records (from|dated from)\s*$/.test(pre)) return 'dos_range';
     // "…records from <dates> for ____" → the patient
     if (/\bfor\s*$/.test(pre) && sameLinePrev && /^dos_/.test(prev.kind)) return 'patient';
-    if (/\b(to|through|thru)\s*$/.test(pre) && /\bfrom\b/.test(b.prevLine.toLowerCase() + ' ' + pre)) return 'dos_to';
+    // "from ____ to ⏎ ____." — the "to" may end the line above
+    if (/\b(to|through|thru)\s*$/.test(lead) && /\bfrom\b/.test(b.prevLine.toLowerCase() + ' ' + pre) && !/^\s*the present/.test(sufL)) return 'dos_to';
     if (/(dates? of service|\bdos\b|service dates?)\s*[:?]?\s*$/.test(before)) return 'dos_range';
 
-    if (/(date of birth|\bdob\b|d\.o\.b\.?|birth ?date)\s*[:?]?\s*$/.test(before)) return 'dob';
+    if (/(date of birth|\bdob\b|d\.o\.b\.?|birth ?date)( of)?\s*[:?]?\s*$/.test(before)) return 'dob';
+    // "____, with the date of birth of ____" — the name comes right before its date of birth
+    if (/^\s*,?\s*(with )?(the |a )?(date of birth|dob|d\.o\.b)/.test(suf)) return 'patient';
     if (/provided to\s*$/.test(lead) || /plaintiff,?\s*$/.test(pre)) return 'patient';
     if (/^\s*(provided to|(still )?has a right to be paid|has the right)/.test(sufL)) return 'facility';
     if (/(pertaining to|patient(?:'s)? name|name of patient|\bpatient|\bre|regarding|in reference to)\s*[:?]?\s*$/.test(pre) ||
@@ -691,7 +705,7 @@
   };
 
   // Values the tool can prove from the attachments — a different value already written there gets corrected.
-  AE.CORRECTABLE = new Set(['dos_from', 'dos_to', 'dos_range', 'pages', 'amt_total', 'amt_writeoff', 'amt_paid', 'amt_balance', 'amt_paid_plus_balance']);
+  AE.CORRECTABLE = new Set(['amt_payor_paid', 'amt_collection', 'amt_payor_owing', 'dos_from', 'dos_to', 'dos_range', 'pages', 'amt_total', 'amt_writeoff', 'amt_paid', 'amt_balance', 'amt_paid_plus_balance']);
   AE.sameValue = function (kind, a, b) {
     a = String(a || '').trim(); b = String(b || '').trim();
     if (!a || !b) return a === b;
@@ -785,6 +799,10 @@
       case 'amt_balance': return d.balance == null ? '' : money(d.balance);
       case 'amt_paid_plus_balance': return d.balance == null ? '' : money((+d.paid || 0) + (+d.balance || 0));
       case 'amt_ins_paid': return money(d.insPaid);
+      // self-pay accounts: nothing sent to collections and nothing owed by a payor unless entered
+      case 'amt_payor_paid': return money((+d.insPaid || 0) + (+d.medPaid || 0));
+      case 'amt_collection': return money(d.collection);
+      case 'amt_payor_owing': return money(d.payorOwing);
       case 'amt_med_paid': return money(d.medPaid);
       case 'amt_pt_paid': return money(d.ptPaid);
       case 'amt_adjust': return money(d.adjust);
