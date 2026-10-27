@@ -978,12 +978,12 @@
   // CMS-1500 box 24 service line: "09 04 25 09 04 25 21 99223 ..." (from, to, place of service)
   const CMS_LINE = /\b(0[1-9]|1[0-2]) (0[1-9]|[12]\d|3[01]) \d{2} (0[1-9]|1[0-2]) (0[1-9]|[12]\d|3[01]) \d{2} \d{2}\b/;
   // UB-04 printed as data only (the red form and its labels are just a picture): revenue-code lines
-  // "0250 Pharmacy 032226 8 626.23" and the line-23 totals row "0001 2 2 040626 146646.78" (page 2 of 2, creation date, total).
+  // "0250 Pharmacy 010126 2 150.00" and the line-23 totals row "0001 2 2 010526 5250.00" (page 2 of 2, creation date, total).
   const UB_REV_LINE = /^(?:\d{1,2}\s+)?0\d{3}\s+[A-Za-z].*\s\d{6}(?:\d{2})?\s+\d+\s+[\d,]+(?:\.\d{2})?$/gm;
   const UB_TOTAL_LINE = /^(?:\d{1,2}\s+)?0001\s+(\d{1,2})\s+(\d{1,2})\s+\d{6}(?:\d{2})?(?:\s+([\d,]+)(?:\.(\d{2})|\s+(\d{2})\b)?)?/;
   const isUb04 = t => /UB-?04|CMS-?1450|NUBC/i.test(t) || t.split('\n').some(l => UB_TOTAL_LINE.test(l)) ||
     (t.match(UB_REV_LINE) || []).length >= 2;
-  // "Page n of m" of a UB-04 page: printed "PAGE 1 OF 2", or on a data-only print just "1 2 040626" / "0001 2 2 040626 …"
+  // "Page n of m" of a UB-04 page: printed "PAGE 1 OF 2", or on a data-only print just "1 2 010526" / "0001 2 2 010526 …"
   function ubPageOf(lines) {
     const m = lines.map(l => l.text).join(' ').match(/PAGE\s+(\d+)\s+OF\s+(\d+)/i);
     if (m) return [+m[1], +m[2]];
@@ -1028,7 +1028,7 @@
           const dm = tl.text.match(UB_TOTAL_LINE);
           if (tm) v = AE.parseMoney(tm[1]) + (+(tm[2] || tm[3] || 0)) / 100;
           else if (dm && dm[3]) {
-            // Data-only print: "146646.78", "7388 20", or "217340" (the form's dotted line splits off the cents)
+            // Data-only print: "5250.00", "5250 00", or "525000" (the form's dotted line splits off the cents)
             v = dm[4] || dm[5] ? AE.parseMoney(dm[3]) + (+(dm[4] || dm[5])) / 100 : AE.parseMoney(dm[3]) / 100;
           } else {
             const nums = tl.items.filter(it => it.x > p.width * 0.66 && /^[\d,]+(\.\d{2})?$/.test(it.str.trim())).map(it => it.str.trim());
@@ -1055,20 +1055,39 @@
       for (const p of pages) for (const l of AE.pageLines(p)) {
         const m = l.text.match(/\b\d{2}-?\d{7}\s+X?\s*\S+\s+X?\s*([\d,]+)[.\s](\d{2})\s+([\d,]+)[.\s](\d{2})\b/);
         if (m) { tot = (tot || 0) + AE.parseMoney(m[1]) + (+m[2]) / 100; paid = (paid || 0) + AE.parseMoney(m[3]) + (+m[4]) / 100; }
+        else {
+          // Amounts printed without a decimal point, the form's dotted line splits off the cents: "… X 123456B X 125050 0" = $1,250.50, paid $0
+          const n = l.text.match(/\b\d{2}-?\d{7}\s+X?\s*\S+\s+X?\s*(\d{3,})\s+(\d+)\s*$/);
+          if (n) { tot = (tot || 0) + +n[1] / 100; paid = (paid || 0) + +n[2] / 100; }
+        }
         // Box 24F on each service line: "05 11 26 05 11 26 10 99214 25 95 F4311 1282.10 1 1164205415" → charge before the units
         if (CMS_LINE.test(l.text)) {
-          const c = l.text.replace(CMS_LINE, ' ').match(/\s([\d,]+)[.\s](\d{2})\s+\d{1,3}(?=\s+(?:NPI\s+)?\d{10}\b|\s*$)/);
+          const rest = l.text.replace(CMS_LINE, ' ');
+          const c = rest.match(/\s([\d,]+)[.\s](\d{2})\s+\d{1,3}(?=\s+(?:NPI\s+)?\d{10}\b|\s*$)/);
+          const c2 = !c && rest.match(/\s(\d{3,})\s+\d{1,3}(?=\s+(?:NPI\s+)?\d{10}\b|\s*$)/); // "ABCD 125050 1 1234567890" = $1,250.50
           if (c) lineSum = (lineSum || 0) + AE.parseMoney(c[1]) + (+c[2]) / 100;
+          else if (c2) lineSum = (lineSum || 0) + +c2[1] / 100;
         }
       }
       if (tot != null) { res.total = tot; res.paid = paid; }
       else if (lineSum != null) { res.total = Math.round(lineSum * 100) / 100; res.notes.push('Box 28 total is empty — total = sum of the service-line charges.'); }
-      const bd = all.match(/[A-Z]{2,}\s+(\d{2})\s(\d{2})\s(\d{4})\b/);
-      const bdt = bd && AE.parseDate(`${bd[1]}/${bd[2]}/${bd[3]}`);
+      // Box 3 birth date after the patient name: "DOE JOHN 01 02 1980", "DOE, JOHN 01 02 80", "DOE JOHN A 01 02 1980".
+      // A date that is too recent is a signature date ("SIGNATURE ON FILE 09 29 26").
+      const brx = /[A-Z]\s+(\d{2})\s(\d{2})\s(\d{4}|\d{2})\b/g; let bd, bdt = null;
+      while (!bdt && (bd = brx.exec(all))) {
+        const d = AE.parseDate(`${bd[1]}/${bd[2]}/${bd[3]}`);
+        if (d && d.getFullYear() < today.getFullYear() - 1) bdt = d;
+      }
       if (bdt) { res.dob = AE.fmtDate(bdt); if (dobDate) res.dobOk = bdt.getTime() === dobDate.getTime(); }
-      // Box 24A dates are printed "MM DD YY"
-      const rx = /\b(0[1-9]|1[0-2])\s(0[1-9]|[12]\d|3[01])\s(\d{2})\b/g; let m;
-      while ((m = rx.exec(all))) { const d = AE.parseDate(`${m[1]}/${m[2]}/${m[3]}`); if (d && d <= today && !isDob(d)) res.dates.push(d); }
+      // Box 24A service dates "MM DD YY MM DD YY POS". Only when no service line is found, every "MM DD YY" on the
+      // form is used — otherwise box 16/18 dates (hospitalization) and the signature date would widen the DOS.
+      const srx = /\b(0[1-9]|1[0-2]) (0[1-9]|[12]\d|3[01]) (\d{2}) (0[1-9]|1[0-2]) (0[1-9]|[12]\d|3[01]) (\d{2}) \d{2}\b/g;
+      let m;
+      while ((m = srx.exec(all))) {
+        for (const d of [AE.parseDate(`${m[1]}/${m[2]}/${m[3]}`), AE.parseDate(`${m[4]}/${m[5]}/${m[6]}`)]) if (d && d <= today) res.dates.push(d);
+      }
+      const rx = /\b(0[1-9]|1[0-2])\s(0[1-9]|[12]\d|3[01])\s(\d{2})\b/g;
+      if (!res.dates.length) while ((m = rx.exec(all))) { const d = AE.parseDate(`${m[1]}/${m[2]}/${m[3]}`); if (d && d <= today && !isDob(d)) res.dates.push(d); }
       const tm = res.total == null && all.match(/TOTAL CHARGE[^\d$]*\$?\s*([\d,]+)[\s.](\d{2})\b/i);
       if (tm) res.total = AE.parseMoney(tm[1]) + (+tm[2]) / 100;
     }
