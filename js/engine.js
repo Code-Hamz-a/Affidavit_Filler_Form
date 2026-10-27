@@ -41,10 +41,17 @@
     notary_year4: 'Sworn date — year',
     notary_date: 'Sworn date (full)',
     yes: 'Answer: Yes',
+    no: 'Answer: No',
+    na: 'Answer: Not applicable',
+    yes_pages: 'Answer: Yes + number of pages',
+    yn_paid: 'Answer: been paid? (Yes / No)',
+    yn_others_paid: 'Answer: paid by insurance or others? (Yes / No)',
     answer: 'Answer (remembered)',
     no_info: 'Answer: no information (custodian)',
     retention: 'Answer: records retention',
     custodian_title: 'Name + title',
+    custodian_title_addr: 'Name + address + title',
+    amt_balance_whom: '$ Outstanding balance + who owes it',
     employer_address: 'Employer + business address',
     amt_ins_paid: '$ Paid by insurance',
     amt_payor_paid: '$ Paid by insurance / Medicaid / Medicare',
@@ -664,9 +671,11 @@
     if (/^\s*,?\s*(with )?(the |a )?(date of birth|dob|d\.o\.b)/.test(suf)) return 'patient';
     if (/provided to\s*$/.test(lead) || /plaintiff,?\s*$/.test(pre)) return 'patient';
     if (/^\s*(provided to|(still )?has a right to be paid|has the right)/.test(sufL)) return 'facility';
+    // "Attached hereto is/are ____ CD(s) of records/materials pertaining to ____" — only for CDs or films, left empty
+    if (/\b(cd\(?s?\)?|films?|x-?rays?)\b[^_]*pertaining to\s*$/.test(pre)) return 'unknown';
     if (/(pertaining to|patient(?:'s)? name|name of patient|\bpatient|\bre|regarding|in reference to)\s*[:?]?\s*$/.test(pre) ||
         /^\s*\(?\s*(patient|name of patient)/.test(suf)) return 'patient';
-    if (/(custodian of (the )?(medical |billing )?records (for|of)|records custodian for|employed by|kept by|course of business of|business of|representative of|health ?care provider|name of (the )?(facility|provider|hospital)|facility|provider|hospital)\s*[:?]?\s*$/.test(before) ||
+    if (/(custodian of (the )?(medical |billing )?records (for|of)|records custodian for|custodian for|employed by|kept by|course of business of|business of|representative of|health ?care provider|name of (the )?(facility|provider|hospital)|facility|provider|hospital)\s*[:?]?\s*$/.test(before) ||
         /^\s*\(?\s*(name of (the )?(facility|provider|hospital)|facility|provider)\b/.test(suf)) return 'facility';
     if (/(title|position|capacity)\s*[:?]?\s*$/.test(pre)) return 'title';
     if (/(from|beginning)\s*$/.test(pre)) return /^\s*(to|through|thru)\b/.test(after) ? 'dos_from' : 'dos_range';
@@ -719,32 +728,53 @@
 
   // Standard DWQ / subpoena questions asked of a custodian of records.
   // Returns a field kind; 'answer' = case-specific question whose answer the app remembers from last time.
+  AE.classifyQuestion = classifyQuestion;
   function classifyQuestion(q) {
     q = q.replace(/^\s*(question|q)?\s*(no\.?|#)?\s*\d*\s*[.):-]?\s*/, '')
       .replace(/^if you (have )?answered yes to question (number )?\d+,?\s*/, '')
       // "Of the total amount charged for treatment to X, how much was written off…" → ask only the last part
       .replace(/^of the total amount (charged|billed)[^,]*,\s*/, '');
+    const handedOver = /have you (done so|done as requested|complied)/.test(q);
     const yesNo = /^(are|is|were|was|have|has|do|does|did|can|will|would|if so)\b/.test(q) ||
       (/,\s*(was|were|is|are|did|does|has|have|will)\s/.test(q) && /\?\s*$/.test(q) && !/^(what|how|please)/.test(q)) ||
       (/\b(have|did|do|are|were|will) you\b[^?]*\?\s*$/.test(q) && !/^(what|how)\b/.test(q)) ||
-      /^(please )?state whether/.test(q) || /have you done so/.test(q);
-    if (/how many pages|number of pages|total (number of )?pages/.test(q)) return 'pages';
-    if (/\bname\b.*\b(title|position|occupation)\b/.test(q)) return 'custodian_title';
+      /^(please )?state whether/.test(q) || handedOver;
+    // "Please release the records… Identify how many pages you have released. Have you done as requested?"
+    if (/how many pages|number of pages|total (number of )?pages/.test(q)) return handedOver ? 'yes_pages' : 'pages';
+    if (/\bname\b.*\b(title|position|occupation)\b/.test(q)) return /address|residence|telephone/.test(q) ? 'custodian_title_addr' : 'custodian_title';
     // Opinions a records custodian cannot give (reasonable / necessary)
     if (/reasonable|necessary/.test(q) && /charge|service|treatment|care/.test(q)) return 'no_info';
     if (/how long.*(maintain|kept|retain)|retention|before destruction/.test(q)) return 'retention';
+    // The provider's insurance contracts and questions that depend on an earlier answer — the custodian answers these
+    // (usually "Not applicable"); the answer is remembered for the next subpoena with the same question.
+    if (/managed care|contractual arrangement|terms of .*coverage|preceding (two|three|four|\d+) questions/.test(q)) return 'answer';
+    // "Please hand / release copies of the records to the Officer (Notary) for photocopying…"
+    if (/^please (hand|release|produce|furnish|deliver)\b/.test(q) && /officer|notary|photocopy|exhibit|attach/.test(q)) return 'yes';
+    if (/^please describe .*not (provided|produced)/.test(q)) return 'na';
     if (yesNo) {
+      // Nothing was taken out and nothing was held back.
+      if (/extracted|removed anything|withheld|altered|(that|which) you have not (provided|produced|handed)|^are there any (further|other|additional) (documents|records)/.test(q)) return 'no';
+      // The custodian (CareCapital) does not manage the provider's accounts receivable.
+      if (/responsibility to manage accounts/.test(q)) return 'no';
+      // "Has your facility been paid…?" / "…been paid by private insurance, or by any person other than the patient?"
+      if (/been paid by (any )?(private )?insur|paid by .*other than/.test(q)) return 'yn_others_paid';
+      if (/^(has|have) (your|the|this) (facility|office|provider|practice|clinic|hospital) been paid|^have you been paid/.test(q)) return 'yn_paid';
       // Business-records foundation questions — always "Yes" for a custodian.
-      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at or near the time|shortly after|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (or )?control|custody and\/or control|sound mind|receive a subpoena|kept as described|have you (provided|produced|attached) all|have you done so|in your custody|originals or true copies|true copies of|have you attached a complete|responsibility to manage accounts|provide (medical )?treatment to/.test(q)) return 'yes';
+      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at or near the time|shortly after|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?control|sound mind|received? a subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied)|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware/.test(q)) return 'yes';
       return 'answer';
     }
     if (/(state|give|what is) your (full |complete )?name|^(please )?state (the )?(full )?name/.test(q)) return 'custodian';
-    if (/by whom (are )?you (are )?employed|who (is your employer|employs you|do you work for)|name of (your )?employer/.test(q))
+    if (/by whom (are )?you (are )?employed|who (is your employer|employs you|do you work for)|name of (your )?employer|employer'?s name/.test(q))
       return /address/.test(q) ? 'employer_address' : 'facility';
     if (/\b(title|position|capacity)\b/.test(q) && /^(what|state|please)/.test(q)) return 'title';
     // things only the provider's billing system can tell: rates, fee schedules, payor names, "accepted in full"
     if (/\brates?\b|fee schedule|names? of|name\(s\)|payment in full|accepted as payment/.test(q)) return 'answer';
     if (/lien/.test(q)) return 'amt_lien';
+    // "…which have been paid by the patient themselves (and not by private insurance or some other person)?"
+    if (/paid/.test(q) && /\b(themselves|himself|herself)\b|\(and not by/.test(q)) return 'amt_pt_paid';
+    // "What amount of the said current balance does the provider continue to seek from the patient…?"
+    if (/(said|current) balance|continue to seek/.test(q)) return 'amt_balance';
+    if (/total amount (still )?owed and by whom|owed,? and by whom/.test(q)) return 'amt_balance_whom';
     if (/total amount (actually )?paid by all|paid by all payors/.test(q)) return 'amt_paid';
     if (/out[- ]of[- ]pocket/.test(q) && /amount|paid/.test(q)) return 'amt_pt_paid';
     if (/owed/.test(q)) return /owed (to this provider )?by (the )?(third[- ]party|medicare|medicaid|insur)/.test(q) ? 'answer' : 'amt_balance';
@@ -752,7 +782,7 @@
     if (/amount (actually )?paid to (your|the|this) (facility|provider|office)/.test(q)) return 'amt_paid';
     // "Total amount paid by <the patient's name>" — anyone who is not an insurer, Medicare or "all payors"
     if (/total amount (of )?paid by (?!(the |any )?(private )?insur|medicare|medicaid|all\b|third)/.test(q)) return 'amt_pt_paid';
-    if (/charged or billed|amount charged|billed or charged|total amount (of )?(all )?(charges|billed)/.test(q)) return 'amt_total';
+    if (/charged or billed|amount charged|billed or charged|total amount (of )?(all )?(charges|billed)|total dollar amount of (the )?charges/.test(q)) return 'amt_total';
     if (/written off|charged off|write[- ]?off/.test(q)) return 'amt_writeoff';
     if (/accepted in full satisfaction/.test(q)) return 'answer';
     if (/paid by (the |any )?(private )?insur|paid by the third[- ]party payor/.test(q)) return /amount|paid/.test(q) ? 'amt_ins_paid' : 'answer';
@@ -774,6 +804,11 @@
     const money = v => AE.fmtMoney(v == null || v === '' ? 0 : v);
     switch (kind) {
       case 'yes': return 'Yes';
+      case 'no': return 'No';
+      case 'na': return 'Not applicable';
+      case 'yes_pages': return d.pages != null && d.pages !== '' ? `Yes, ${d.pages} pages` : 'Yes';
+      case 'yn_paid': return (+d.paid || 0) > 0 ? 'Yes' : 'No';
+      case 'yn_others_paid': return (+d.insPaid || 0) + (+d.medPaid || 0) > 0 ? 'Yes' : 'No';
       case 'custodian': return d.custodian || '';
       case 'title': return d.title || '';
       case 'facility': return d.facility || '';
@@ -807,7 +842,10 @@
       case 'amt_pt_paid': return money(d.ptPaid);
       case 'amt_adjust': return money(d.adjust);
       case 'amt_lien': return d.lien == null ? '' : money(d.lien);
-      case 'custodian_title': return [d.custodian, d.address, d.title].filter(Boolean).join(', ');
+      case 'custodian_title': return [d.custodian, d.title].filter(Boolean).join(', ');
+      case 'custodian_title_addr': return [d.custodian, d.address, d.title].filter(Boolean).join(', ');
+      // "Total amount still owed and by whom" → "$147,717.77, Jane Doe"
+      case 'amt_balance_whom': return d.balance == null ? '' : (+d.balance || 0) > 0 && d.patient ? `${money(d.balance)}, ${d.patient}` : money(d.balance);
       case 'employer_address': return [d.facility, d.address].filter(Boolean).join(', ');
       case 'no_info': return d.noInfo || '';
       case 'retention': return d.retention || '';
@@ -1127,7 +1165,12 @@
       const tokens = ctx.patient.toUpperCase().replace(/[^A-Z\s'-]/g, ' ').split(/\s+/)
         .filter(t => t.length > 1 && !/^(JR|SR|II|III|IV|MR|MRS|MS)$/.test(t));
       if (!all.trim()) res.nameOk = null;
-      else res.nameOk = tokens.length > 0 && tokens.every(t => new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(up));
+      else {
+        const found = tokens.filter(t => new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(up));
+        // A 3-part name may be printed with one surname only ("Maria Lopez Diaz" → "LOPEZ, MARIA D")
+        res.nameOk = tokens.length > 0 && (found.length === tokens.length ||
+          (tokens.length >= 3 && found.includes(tokens[0]) && found.length >= tokens.length - 1));
+      }
     }
     const unreadable = all.trim() && AE.readableShare(pages) < 0.6;
     if (unreadable) {
