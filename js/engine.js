@@ -694,7 +694,6 @@
   // ---------------------------------------------------- facility profiles
   AE.normName = s => String(s || '').toLowerCase().replace(/\./g, '').replace(/\bd\s*\/\s*b\s*\/\s*a\b/g, 'dba').replace(/&/g, ' and ').replace(/care\s+capital/g, 'carecapital')
     .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
-  // "Psychiatry of Texas c/o CareCapital" → name to print on the affidavit: "Psychiatry of Texas"
   // "Psychiatry of Texas c/o CareCapital" → "Psychiatry of Texas" (only for matching a request to the facility list)
   AE.baseName = name => String(name || '').split(/\s+c\/o\s+/i)[0].trim();
   // Name printed on the affidavit: the full name, "c/o CareCapital" included (user's rule).

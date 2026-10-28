@@ -541,6 +541,13 @@
     };
   }
 
+  // Name printed for the facility field: a facility from the list typed short ("Integrity Healthcare Service")
+  // still prints its affidavit name ("Integrity Healthcare Service c/o Care Capital").
+  function printName(v) {
+    const n = AE.normName(v);
+    const p = n && settings.profiles.find(p => p.name && [p.name, AE.baseName(p.name), p.affName].some(x => x && AE.normName(x) === n));
+    return p ? AE.affidavitName(p.affName || p.name) : AE.affidavitName(v);
+  }
   function caseData() {
     const prof = activeProfile();
     const sd = $('#f-sworn-date').value ? new Date($('#f-sworn-date').value + 'T12:00:00') : new Date();
@@ -548,7 +555,7 @@
       custodian: (prof && prof.custodian) || settings.custodian, title: settings.title,
       address: settings.address, noInfo: settings.noInfo, retention: settings.retention, type: type(),
       county: (prof && prof.county) || settings.county, state: settings.state,
-      facility: AE.affidavitName(val('f-facility')), patient: val('f-patient'), dob: val('f-dob'),
+      facility: printName(val('f-facility')), patient: val('f-patient'), dob: val('f-dob'),
       dosFrom: val('f-from'), dosTo: val('f-to'),
       pages: val('f-pages') || null,
       total: AE.parseMoney(val('f-total')), writeoff: AE.parseMoney(val('f-writeoff')) || 0,

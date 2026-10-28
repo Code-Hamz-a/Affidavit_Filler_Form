@@ -9,7 +9,7 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
 1. **Settings & facilities** (one time only): enter the default custodian name, title, county and state. The facility list comes pre-loaded with 20 facilities.
    - Add more with **+ Add facility**, or paste a whole column from Excel with **Paste a list from Excel…**.
    - A facility with its own custodian or county gets them in that row. Leave a cell blank to use the default.
-   - "Name on affidavit" is what gets printed. For "… c/o CareCapital" facilities it is the full name, "c/o CareCapital" included (e.g. "Psychiatry of Texas c/o CareCapital"). Facility lists saved by older versions are updated automatically, unless you typed your own "Name on affidavit".
+   - "Name on affidavit" is what gets printed. For "… c/o CareCapital" facilities it is the full name, "c/o CareCapital" included (e.g. "Psychiatry of Texas c/o CareCapital"). Facility lists saved by older versions are updated automatically, unless you typed your own "Name on affidavit". Picking or typing the short name ("Psychiatry of Texas") still prints the full name.
 2. **Request PDF**: drop in the law firm's request (letter + affidavit + HIPAA authorization). The tool reads:
    - the patient name, DOB and facility
    - the requested DOS range
