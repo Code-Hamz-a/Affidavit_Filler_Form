@@ -538,7 +538,7 @@
     const sd = $('#f-sworn-date').value ? new Date($('#f-sworn-date').value + 'T12:00:00') : new Date();
     return {
       custodian: (prof && prof.custodian) || settings.custodian, title: settings.title,
-      address: settings.address, noInfo: settings.noInfo, retention: settings.retention,
+      address: settings.address, noInfo: settings.noInfo, retention: settings.retention, type: type(),
       county: (prof && prof.county) || settings.county, state: settings.state,
       facility: AE.affidavitName(val('f-facility')), patient: val('f-patient'), dob: val('f-dob'),
       dosFrom: val('f-from'), dosTo: val('f-to'),
@@ -579,19 +579,22 @@
   function recallAnswer(b) {
     const saved = (settings.answers || {})[answerKey(b)];
     if (!saved) return '';
-    return swap(swap(saved, '{patient}', val('f-patient')), '{facility}', val('f-facility'));
+    return swap(swap(swap(saved, '{patient}', val('f-patient')), '{facility}', val('f-facility')), '{custodian}', caseData().custodian || '');
   }
   function rememberAnswer(b, value) {
     settings.answers = settings.answers || {};
     let v = value.trim();
     if (val('f-patient')) v = swap(v, val('f-patient'), '{patient}');
     if (val('f-facility')) v = swap(v, val('f-facility'), '{facility}');
+    // The custodian changes from case to case — never store their name, only a placeholder.
+    const cust = caseData().custodian;
+    if (cust && cust.trim().length > 2) v = swap(v, cust.trim(), '{custodian}');
     if (v) settings.answers[answerKey(b)] = v; else delete settings.answers[answerKey(b)];
     saveSettings();
   }
   // Subpoena answers that are the same on every case (not amounts, dates, pages or names) — the user's own
   // wording for them is remembered per question.
-  const REMEMBER_KINDS = new Set(['answer', 'yes', 'no', 'na', 'no_info', 'retention']);
+  const REMEMBER_KINDS = new Set(['answer', 'yes', 'no', 'na', 'no_info', 'retention', 'archive', 'all_provided', 'no_knowledge']);
   const rememberable = b => !!(b.dwq && b.question && REMEMBER_KINDS.has(b.kind));
   // Called after the user typed in a blank. Typing the standard answer again forgets the remembered one.
   function rememberEdit(b) {

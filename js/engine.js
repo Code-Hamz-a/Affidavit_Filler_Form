@@ -43,6 +43,9 @@
     yes: 'Answer: Yes',
     no: 'Answer: No',
     na: 'Answer: Not applicable',
+    archive: 'Answer: archive (no records found?)',
+    all_provided: 'Answer: provided all records',
+    no_knowledge: 'Answer: no information (other providers)',
     yes_pages: 'Answer: Yes + number of pages',
     yn_paid: 'Answer: been paid? (Yes / No)',
     yn_others_paid: 'Answer: paid by insurance or others? (Yes / No)',
@@ -751,7 +754,11 @@
     // Opinions a records custodian cannot give (reasonable / necessary)
     if (/reasonable|necessary/.test(q) && /charge|service|treatment|care/.test(q)) return 'no_info';
     // "In the event that no records can be found, are there archives or retention policies…?" — records were found
-    if (/in the event (that )?no records|if no records (can be|are|were) (found|located)/.test(q)) return 'na';
+    if (/in the event (that )?no records|if no records (can be|are|were) (found|located)/.test(q)) return 'archive';
+    // "Have you now provided all the records…?" / "…produced records… other than those made the basis of this suit?"
+    if (/have you now provided all|other than (for )?those (records )?made the basis/.test(q)) return 'all_provided';
+    // Other providers that may hold records — a custodian cannot know
+    if (/^are you aware of any other (hospital|clinic|physician|doctor|provider|facility)/.test(q)) return 'no_knowledge';
     if (/how long.*(maintain|kept|retain)|retention|before destruction/.test(q)) return 'retention';
     // The provider's insurance contracts and questions that depend on an earlier answer — the custodian answers these
     // (usually "Not applicable"); the answer is remembered for the next subpoena with the same question.
@@ -815,6 +822,10 @@
       case 'yes': return 'Yes';
       case 'no': return 'No';
       case 'na': return 'Not applicable';
+      // the custodian's standard wording (from a filled LORR DWQ)
+      case 'archive': return 'Archive';
+      case 'all_provided': return `I have provided all ${d.type === 'billing' ? 'billing' : 'medical'} records under my care and possession.`;
+      case 'no_knowledge': return `I do not have that information, I am the custodian of records, I maintain and produce ${d.type === 'billing' ? 'billing' : 'medical'} records.`;
       case 'yes_pages': return d.pages != null && d.pages !== '' ? `Yes, ${d.pages} pages` : 'Yes';
       case 'yn_paid': return (+d.paid || 0) > 0 ? 'Yes' : 'No';
       case 'yn_others_paid': return (+d.insPaid || 0) + (+d.medPaid || 0) > 0 ? 'Yes' : 'No';
