@@ -555,6 +555,8 @@
   function blankValue(b) {
     if (b.override != null) return b.override;
     if (b.kind === 'answer') return recallAnswer(b);
+    // A standard answer the user changed on an earlier subpoena ("Yes" → "No, uploaded in ChartSwap") wins.
+    if (rememberable(b)) { const saved = recallAnswer(b); if (saved) return saved; }
     const v = AE.valueFor(b.kind, caseData());
     return b.dwq && /^amt_/.test(b.kind) && v && !b.dollarPrinted ? '$' + v : v;
   }
@@ -586,6 +588,20 @@
     if (val('f-facility')) v = swap(v, val('f-facility'), '{facility}');
     if (v) settings.answers[answerKey(b)] = v; else delete settings.answers[answerKey(b)];
     saveSettings();
+  }
+  // Subpoena answers that are the same on every case (not amounts, dates, pages or names) — the user's own
+  // wording for them is remembered per question.
+  const REMEMBER_KINDS = new Set(['answer', 'yes', 'no', 'na', 'no_info', 'retention']);
+  const rememberable = b => !!(b.dwq && b.question && REMEMBER_KINDS.has(b.kind));
+  // Called after the user typed in a blank. Typing the standard answer again forgets the remembered one.
+  function rememberEdit(b) {
+    if (!rememberable(b) || b.override == null) return;
+    const v = b.override.trim();
+    if (b.kind !== 'answer' && (!v || v === AE.valueFor(b.kind, caseData()))) {
+      if (settings.answers && settings.answers[answerKey(b)]) { delete settings.answers[answerKey(b)]; saveSettings(); }
+      return;
+    }
+    rememberAnswer(b, v);
   }
 
   // Recomputes automatic fields, blank values, preview labels and warnings.
@@ -685,7 +701,7 @@
       const inp = tr.querySelector('input[type=text]');
       inp.addEventListener('input', () => { b.override = inp.value; if (inp.value.trim()) { b.include = true; b.autoInclude = false; } refresh(); });
       inp.addEventListener('focus', () => select(b.uid, false));
-      if (b.kind === 'answer') inp.addEventListener('change', () => rememberAnswer(b, inp.value));
+      if (rememberable(b)) inp.addEventListener('change', () => rememberEdit(b));
       const sel = tr.querySelector('select[data-kind]');
       sel.addEventListener('change', () => {
         b.kind = sel.value; b.override = null;
@@ -1018,7 +1034,7 @@
       if (done) return;
       done = true;
       inp.remove();
-      if (b.kind === 'answer') rememberAnswer(b, shownValue(b));
+      if (b.override !== before) rememberEdit(b);
       refresh();
     });
   }
