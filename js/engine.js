@@ -400,7 +400,10 @@
         }
       });
       const lines = buildLines(page, new Set(overlay.keys()));
+      // "Affidavit / Certificate of No Records" — only signed when nothing was found, so its blanks start unticked.
+      const noRec = lines.find(l => /^\s*(affidavit|certificate|certification|declaration) of no (medical |billing )?records?\b/i.test(l.text));
       for (const b of found) {
+        b.noRecords = !!noRec && b.y < noRec.y + 2;
         let li = b.itemIdx != null ? lines.findIndex(l => l.items.some(it => it.i === b.itemIdx)) : -1;
         if (li < 0) {
           // A drawn underline: the text line it sits on, or (signature line) its place between two lines.
@@ -420,7 +423,8 @@
         b.prefix = (joinItems(before) + ' ' + b.raw.slice(0, b.mIndex)).replace(/\s+/g, ' ').trim();
         b.suffix = (b.raw.slice(b.mIndex + b.mLen) + ' ' + (b.tail || '') + ' ' + joinItems(after)).replace(/\s+/g, ' ').trim();
         b.prevLine = prevIdx >= 0 ? lines[prevIdx].text : '';
-        b.prevLines = (prevIdx < 7 ? tail + ' ' : '') + lines.slice(Math.max(0, prevIdx - 7), prevIdx + 1).map(l => l.text).join(' ');
+        // up to 20 lines back: a question that quotes the whole subpoena request can run 17 lines
+        b.prevLines = (prevIdx < 7 ? tail + ' ' : '') + lines.slice(Math.max(0, prevIdx - 19), prevIdx + 1).map(l => l.text).join(' ');
         b.nextLine = nextIdx < lines.length ? lines[nextIdx].text : '';
         b.lineText = line.text;
         const pre = [...overlay.entries()].filter(([, ob]) => ob === b).map(([i]) => page.items[i]);
@@ -610,7 +614,9 @@
     if (answerLabel || (!hasWords(preL) && /\banswer\s*[:;.]?\s*$/i.test(b.prevLine))) {
       const MARK = '\u0001';
       const ctx = (b.prevLines + ' ' + b.prefix + ' ').replace(/_{2,}/g, ' ') // original case: "A." is a label, "a." is not
-        .replace(/\b(?:answer|ans)\s*[:;]/gi, MARK)                      // "Answer:" / "Answer;"
+        // a middle initial ("JOHN A. DOE") is not an "A." answer or item label
+        .replace(/(\b[A-Za-z]{2,}) ([A-Z])\. (?=[A-Z][A-Za-z'-]+\b)(?!(?:TOTAL|AMOUNT|THE|WHAT|HOW|PLEASE|DATE|NAME)\b)/g, '$1 $2 ')
+        .replace(/\b(?:answer|ans)\s*[:;]/gi, MARK)                     // "Answer:" / "Answer;"
         .replace(/\b(?:answer|ans)\s*\.?\s*$/i, MARK)                    // this blank's own "Answer"
         .replace(/(^|\s)A\s*[.:]?(?=\s+(?:\d{1,2}[.\s]|$))/g, '$1' + MARK) // "A." / "A" before the next question
         .replace(/\s[QA]\s*[:.]\s/g, ' ' + MARK + ' ');                   // "Q: … A: …"
@@ -645,7 +651,7 @@
 
     // Sworn/notary date
     if (/^\s*(st|nd|rd|th)?\s*day of/.test(suf) || (/^\s*(st|nd|rd|th)?\s*day\b/.test(suf) && /\b(this|the|on)\s*$/.test(pre))) return 'notary_day';
-    if (/day of\s*$/.test(lead)) return 'notary_month';
+    if (/d ?a ?y of\s*$/.test(lead)) return 'notary_month'; // some PDFs split the word: "da y of"
     if (sameLinePrev && /^notary_(month|day)$/.test(prev.kind) && /,?\s*20\.?\s*$/.test(pre)) return 'notary_year2';
     if (sameLinePrev && prev.kind === 'notary_month' && /,\s*$/.test(pre)) return 'notary_year4';
     if (/(subscribed|sworn)[^.]*\b(on|this)\s*$/.test(before) || /(subscribed|sworn)[^.]*before me,?\s*$/.test(before)) return 'notary_date';
@@ -734,7 +740,7 @@
       .replace(/^if you (have )?answered yes to question (number )?\d+,?\s*/, '')
       // "Of the total amount charged for treatment to X, how much was written off…" → ask only the last part
       .replace(/^of the total amount (charged|billed)[^,]*,\s*/, '');
-    const handedOver = /have you (done so|done as requested|complied)/.test(q);
+    const handedOver = /have you (done so|done as requested|complied|(now )?(produced|provided))/.test(q);
     const yesNo = /^(are|is|were|was|have|has|do|does|did|can|will|would|if so)\b/.test(q) ||
       (/,\s*(was|were|is|are|did|does|has|have|will)\s/.test(q) && /\?\s*$/.test(q) && !/^(what|how|please)/.test(q)) ||
       (/\b(have|did|do|are|were|will) you\b[^?]*\?\s*$/.test(q) && !/^(what|how)\b/.test(q)) ||
@@ -744,6 +750,8 @@
     if (/\bname\b.*\b(title|position|occupation)\b/.test(q)) return /address|residence|telephone/.test(q) ? 'custodian_title_addr' : 'custodian_title';
     // Opinions a records custodian cannot give (reasonable / necessary)
     if (/reasonable|necessary/.test(q) && /charge|service|treatment|care/.test(q)) return 'no_info';
+    // "In the event that no records can be found, are there archives or retention policies…?" — records were found
+    if (/in the event (that )?no records|if no records (can be|are|were) (found|located)/.test(q)) return 'na';
     if (/how long.*(maintain|kept|retain)|retention|before destruction/.test(q)) return 'retention';
     // The provider's insurance contracts and questions that depend on an earlier answer — the custodian answers these
     // (usually "Not applicable"); the answer is remembered for the next subpoena with the same question.
@@ -753,14 +761,15 @@
     if (/^please describe .*not (provided|produced)/.test(q)) return 'na';
     if (yesNo) {
       // Nothing was taken out and nothing was held back.
-      if (/extracted|removed anything|withheld|altered|(that|which) you have not (provided|produced|handed)|^are there any (further|other|additional) (documents|records)/.test(q)) return 'no';
+      // Nothing destroyed or missing, no other place or provider holding this patient's records.
+      if (/extracted|removed anything|withheld|altered|destroyed|missing|(that|which) you have not (provided|produced|handed)|^are there any (further|other|additional) (documents|records|locations|places|facilities|offices)|^are you aware of any/.test(q)) return 'no';
       // The custodian (CareCapital) does not manage the provider's accounts receivable.
       if (/responsibility to manage accounts/.test(q)) return 'no';
       // "Has your facility been paid…?" / "…been paid by private insurance, or by any person other than the patient?"
       if (/been paid by (any )?(private )?insur|paid by .*other than/.test(q)) return 'yn_others_paid';
       if (/^(has|have) (your|the|this) (facility|office|provider|practice|clinic|hospital) been paid|^have you been paid/.test(q)) return 'yn_paid';
       // Business-records foundation questions — always "Yes" for a custodian.
-      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at or near the time|shortly after|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?control|sound mind|received? a subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied)|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware/.test(q)) return 'yes';
+      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at or near the time|shortly after|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|received? a subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
       return 'answer';
     }
     if (/(state|give|what is) your (full |complete )?name|^(please )?state (the )?(full )?name/.test(q)) return 'custodian';

@@ -148,7 +148,7 @@
   resetState();
   const toBlankRow = b => ({
     ...b, uid: 'b' + (S.nextId++),
-    include: !AE.SKIP_KINDS.has(b.kind) && !b.prefilled,
+    include: !AE.SKIP_KINDS.has(b.kind) && !b.prefilled && !b.noRecords,
     autoInclude: true, override: null
   });
 
