@@ -9,7 +9,7 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
 1. **Settings & facilities** (one time only): enter the default custodian name, title, county and state. The facility list comes pre-loaded with 20 facilities.
    - Add more with **+ Add facility**, or paste a whole column from Excel with **Paste a list from Excel…**.
    - A facility with its own custodian or county gets them in that row. Leave a cell blank to use the default.
-   - "Name on affidavit" is what gets printed. For "… c/o CareCapital" facilities it drops the "c/o CareCapital" part.
+   - "Name on affidavit" is what gets printed. For "… c/o CareCapital" facilities it is the full name, "c/o CareCapital" included (e.g. "Psychiatry of Texas c/o CareCapital"). Facility lists saved by older versions are updated automatically, unless you typed your own "Name on affidavit".
 2. **Request PDF**: drop in the law firm's request (letter + affidavit + HIPAA authorization). The tool reads:
    - the patient name, DOB and facility
    - the requested DOS range
@@ -45,7 +45,7 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
 5. **Affidavit blanks**: each blank is detected and filled from the details above.
    - If a blank already has a **wrong** DOS, page count or amount, the old value is whited out and replaced.
    - Blanks made with **underline lines** (Word forms that underline spaces instead of typing "____") are found too. A blank split into pieces ("____ ____") is filled as one.
-   - The provider name is printed without "c/o CareCapital".
+   - The provider name is printed in full, including "c/o CareCapital".
    - Signature and notary-signature lines stay blank.
    - **Edit by hand (like the Edge PDF viewer):**
      - Click any box on the preview and type straight into it. **Enter** or clicking elsewhere keeps it, **Esc** undoes it.

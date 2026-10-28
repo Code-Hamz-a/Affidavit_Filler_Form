@@ -33,8 +33,15 @@
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) { /* first run */ }
   if (!Array.isArray(settings.profiles)) settings.profiles = SEED_FACILITIES.map(newProfile);
   delete settings.facilities; delete settings.facility; // older versions
+  // Up to v3.6 "c/o CareCapital" was left off the affidavit name — print the full name now, unless the user typed their own.
+  const fullCoName = profiles => profiles.forEach(p => {
+    if (p && p.name && /\sc\/o\s/i.test(p.name) && (!p.affName || p.affName === AE.baseName(p.name))) p.affName = AE.affidavitName(p.name);
+  });
+  const migrateCo = !settings.fullCoName;
+  if (migrateCo) { fullCoName(settings.profiles); settings.fullCoName = true; }
   if (!settings.stateLong) { settings.state = AE.stateLong(settings.state) || 'Texas'; settings.stateLong = true; }
   const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* storage blocked */ } };
+  if (migrateCo) saveSettings();
 
   const SETTING_FIELDS = {
     's-custodian': 'custodian', 's-title': 'title', 's-county': 'county', 's-state': 'state',
@@ -123,6 +130,7 @@
     // Facilities: add the new ones, keep yours. Remembered answers: add theirs, yours win on conflicts.
     const mine = new Set(settings.profiles.map(p => AE.normName(p.name)));
     const added = incoming.profiles.filter(p => p.name && !mine.has(AE.normName(p.name)));
+    if (!incoming.fullCoName) fullCoName(added); // exported by an older version
     settings.profiles.push(...added);
     settings.answers = { ...(incoming.answers || {}), ...(settings.answers || {}) };
     for (const k of ['title', 'county', 'state', 'address', 'noInfo', 'retention']) if (incoming[k]) settings[k] = incoming[k];

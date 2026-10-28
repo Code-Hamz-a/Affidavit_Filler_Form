@@ -695,11 +695,14 @@
   AE.normName = s => String(s || '').toLowerCase().replace(/\./g, '').replace(/\bd\s*\/\s*b\s*\/\s*a\b/g, 'dba').replace(/&/g, ' and ').replace(/care\s+capital/g, 'carecapital')
     .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
   // "Psychiatry of Texas c/o CareCapital" → name to print on the affidavit: "Psychiatry of Texas"
-  AE.affidavitName = name => String(name || '').split(/\s+c\/o\s+/i)[0].trim();
+  // "Psychiatry of Texas c/o CareCapital" → "Psychiatry of Texas" (only for matching a request to the facility list)
+  AE.baseName = name => String(name || '').split(/\s+c\/o\s+/i)[0].trim();
+  // Name printed on the affidavit: the full name, "c/o CareCapital" included (user's rule).
+  AE.affidavitName = name => String(name || '').replace(/\s+/g, ' ').trim();
   // Every way a facility may be written: full name, without "c/o …", both sides of "DBA", without MD/PA/PLLC.
   AE.facilityAliases = function (name) {
-    const parts = new Set([name, AE.affidavitName(name)]);
-    AE.affidavitName(name).split(/\s+d\/?b\/?a\/?\s+/i).forEach(x => parts.add(x));
+    const parts = new Set([name, AE.baseName(name)]);
+    AE.baseName(name).split(/\s+d\/?b\/?a\/?\s+/i).forEach(x => parts.add(x));
     for (const p of [...parts]) {
       // drop credentials and single initials: "M. Radwan Al-Sabbagh, MD., PA" → "radwan al sabbagh"
       parts.add(AE.normName(p).split(' ').filter(t => t.length > 1 && !/^(md|pa|pllc|llc|inc|do|dr|lp|ltd|pc)$/.test(t)).join(' '));
