@@ -767,7 +767,7 @@
     if (/managed care|contractual arrangement|terms of .*coverage|preceding (two|three|four|\d+) questions/.test(q)) return 'answer';
     // "Please hand / release copies of the records to the Officer (Notary) for photocopying…"
     if (/^please (hand|release|produce|furnish|deliver)\b/.test(q) && /officer|notary|photocopy|exhibit|attach/.test(q)) return 'yes';
-    if (/^please describe .*not (provided|produced)/.test(q)) return 'na';
+    if (/^(please )?(describe|identify|list) .*not (been )?(provided|produced|handed)/.test(q)) return 'na';
     if (yesNo) {
       // Nothing was taken out and nothing was held back.
       // Nothing destroyed or missing, no other place or provider holding this patient's records.
