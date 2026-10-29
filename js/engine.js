@@ -778,7 +778,7 @@
       if (/been paid by (any )?(private )?insur|paid by .*other than/.test(q)) return 'yn_others_paid';
       if (/^(has|have) (your|the|this) (facility|office|provider|practice|clinic|hospital) been paid|^have you been paid/.test(q)) return 'yn_paid';
       // Business-records foundation questions — always "Yes" for a custodian.
-      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at or near the time|shortly after|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|received? a subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
+      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at or near the time|shortly after|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|received? a subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
       return 'answer';
     }
     if (/(state|give|what is) your (full |complete )?name|^(please )?state (the )?(full )?name/.test(q)) return 'custodian';
@@ -800,7 +800,7 @@
     if (/amount (actually )?paid to (your|the|this) (facility|provider|office)/.test(q)) return 'amt_paid';
     // "Total amount paid by <the patient's name>" — anyone who is not an insurer, Medicare or "all payors"
     if (/total amount (of )?paid by (?!(the |any )?(private )?insur|medicare|medicaid|all\b|third)/.test(q)) return 'amt_pt_paid';
-    if (/charged or billed|amount charged|billed or charged|total amount (of )?(all )?(charges|billed)|total dollar amount of (the )?charges/.test(q)) return 'amt_total';
+    if (/charged or billed|amount charged|billed or charged|total amount (of )?(all )?(charges|billed)|(total dollar|full|total|entire) amount of (the )?charges/.test(q)) return 'amt_total';
     if (/written off|charged off|write[- ]?off/.test(q)) return 'amt_writeoff';
     if (/accepted in full satisfaction/.test(q)) return 'answer';
     if (/paid by (the |any )?(private )?insur|paid by the third[- ]party payor/.test(q)) return /amount|paid/.test(q) ? 'amt_ins_paid' : 'answer';
