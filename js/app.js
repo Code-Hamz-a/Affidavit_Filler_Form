@@ -1289,6 +1289,11 @@
     renderAttachments(); renderBlanksTable(); renderPreview(); refresh();
     setTool(null);
   });
+  // Same as the header button; then back to the top for the next request.
+  $('#btn-reset2').addEventListener('click', () => {
+    $('#btn-reset').click();
+    if (!S.req && !S.atts.length) window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
 
   renderAttachments();
   refresh();
