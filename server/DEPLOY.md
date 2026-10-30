@@ -96,6 +96,22 @@ sudo -u affidavit node --env-file=.env src/cli.js admin-code admin@company.com
 ```
 This prints a new activation code. The admin's password and two-step are cleared, so they activate again and set up two-step again. Every use is written to the activity log.
 
+## Shared hosting with cPanel (e.g. Spaceship Web Hosting)
+Instead of steps 1–4 above, use cPanel's **Setup Node.js App** (CloudLinux + Passenger):
+1. Upload the project (without `server/node_modules`, `server/data` and any PDFs) to a folder in the home directory, **not** in `public_html`, e.g. `/home/USER/affidavit`. Create `/home/USER/affidavit-data` for the database.
+2. **Setup Node.js App → Create Application**:
+   - Node.js version **22.13 or newer**. If the list stops below 22.13, this hosting cannot run the server.
+   - Application mode: Production
+   - Application root: `affidavit/server`
+   - Application URL: the domain or sub-domain
+   - Application startup file: `app.cjs`
+   - Environment variables: `SETUP_TOKEN`, `SECRET_KEY`, `TRUST_PROXY=1`, `DATA_DIR=/home/USER/affidavit-data`
+3. Press **Create**, then **Run NPM Install**, then **Restart**.
+4. Make sure the domain has an SSL certificate (cPanel → **SSL/TLS Status** → Run AutoSSL). Sign-in only works over HTTPS.
+5. Continue with **5. The first admin** below.
+
+Recovery commands (`src/cli.js`) are run from cPanel → **Terminal**, after entering the app's environment with the command shown at the top of its Setup Node.js App page.
+
 ## Updates
 ```bash
 cd /opt/affidavit/app && sudo -u affidavit git pull
