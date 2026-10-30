@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>First-time setup — Affidavit Filler</title>
+<link rel="stylesheet" href="/assets/auth.css">
+<script src="/assets/auth.js" defer></script>
+</head>
+<body data-page="setup">
+<div class="center">
+  <div class="brand">
+    <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#1E4FBF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+    Affidavit Filler
+  </div>
+
+  <div class="card narrow" id="closed" hidden>
+    <h1>Setup is already complete</h1>
+    <p class="lead">The first admin has been created, so this page is switched off. New accounts are created by an admin from the dashboard.</p>
+    <a class="btn btn-primary btn-block" href="/login">Go to sign in</a>
+  </div>
+
+  <div class="card narrow" id="notoken" hidden>
+    <h1>Setup token missing</h1>
+    <p class="lead">The server was started without a setup token. Ask the person who deployed it to set <b>SETUP_TOKEN</b> (at least 16 characters) and restart the server, then open this page again.</p>
+  </div>
+
+  <div class="cols" id="open" hidden>
+    <form class="card" id="form" novalidate>
+      <div style="display:flex; flex-direction:column; gap:6px">
+        <span class="badge badge-amber" style="align-self:flex-start">Step 1 of 2 · works only until the first admin exists</span>
+        <h1>Create the first admin</h1>
+        <p class="lead">This page works only once. After the first admin is created it is switched off for good, and every other account is created from the admin dashboard.</p>
+      </div>
+      <div class="field">
+        <label for="token">Setup token</label>
+        <input id="token" name="token" autocomplete="off" required autofocus>
+        <span class="hint">Given by the person who deployed the app (it is in the server settings).</span>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="name">Full name</label>
+          <input id="name" name="name" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="mobile">Mobile number</label>
+          <input id="mobile" name="mobile" type="tel" autocomplete="tel" required>
+        </div>
+      </div>
+      <div class="field">
+        <label for="email">Work email (used to sign in)</label>
+        <input id="email" name="email" type="email" autocomplete="username" required>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required>
+        </div>
+        <div class="field">
+          <label for="confirm">Confirm password</label>
+          <input id="confirm" name="confirm" type="password" autocomplete="new-password" required>
+        </div>
+      </div>
+      <ul class="rules" id="rules" aria-live="polite"></ul>
+      <div class="alert alert-error" id="error" role="alert" hidden></div>
+      <button class="btn btn-primary btn-block" type="submit" id="submit">Next: turn on two-step sign-in</button>
+    </form>
+    <div style="display:flex; flex-direction:column; gap:14px">
+      <h2 style="font-size:15px; color:var(--ink-2)">How the first admin gets in</h2>
+      <ol class="steps">
+        <li><span class="n">1</span><span>The app is deployed with a secret setup token in its server settings.</span></li>
+        <li><span class="n">2</span><span>The deployer gives the token to the first admin, in person or by phone.</span></li>
+        <li><span class="n">3</span><span>The admin enters the token, name, mobile, email and password here.</span></li>
+        <li><span class="n">4</span><span>The admin scans a QR code in Google or Microsoft Authenticator and saves 10 backup codes.</span></li>
+        <li><span class="n">5</span><span>Setup closes for good. The admin adds a second admin and all users from the dashboard.</span></li>
+      </ol>
+    </div>
+  </div>
+</div>
+</body>
+</html>

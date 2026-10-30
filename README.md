@@ -63,12 +63,23 @@ If a request has no affidavit to fill, tick **Add a standard affidavit page**. I
 - a records affidavit (Tex. R. Evid. 902(10))
 - a billing affidavit (Tex. Civ. Prac. & Rem. Code § 18.001)
 
+## Online version with sign-in (server/)
+The same tool can run on a company server, so that only invited people can use it:
+- There is no open sign-up. An admin creates each account and gives the user a one-time activation code.
+- The admin dashboard shows who is online and which tools each user may use (records, billing, subpoenas, facility list). It also has add, edit, reset password, unlock, sign out and delete.
+- Two-step sign-in uses Google or Microsoft Authenticator, and is required for admins.
+- The first admin is created once on `/setup` with a setup token from the server settings.
+- Patient PDFs are still processed only in the browser. The server stores users and an activity log, never patient data.
+
+Setup steps are in [server/DEPLOY.md](server/DEPLOY.md). The offline version (double-click the HTML file) keeps working as before.
+
 ## Files
 - `Affidavit Filler.html`: the app
 - `js/engine.js`: finds and labels blanks, reads the request and invoices, and builds the PDF
 - `js/app.js`: the screen and workflow
 - `js/ocr.js` + `lib/ocr-core.js` + `lib/ocr-eng-data.js`: offline OCR (Tesseract 5, English). These load only when a scanned PDF needs them.
 - `lib/`: pdf.js 3.11 and pdf-lib 1.17, stored locally so the app works offline
+- `server/`: the sign-in server (Node.js, Express, built-in SQLite): `src/` holds the server code, `public/` the sign-in pages and admin dashboard
 
 ## Third-party components
 Stored in `lib/` so the tool works offline:

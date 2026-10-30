@@ -1,0 +1,14 @@
+/* Sign-in bar added on top of the Affidavit Filler when served by the server. */
+.af-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding: 8px 18px;
+  background: #14213D; color: #C9D3E6; font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+.af-bar .af-who { color: #fff; font-weight: 600; margin-right: auto; }
+.af-bar a { color: #8FB3FF; }
+.af-bar a:hover { color: #fff; }
+.af-bar button {
+  background: none; border: 1px solid #2E3F66; color: #fff; border-radius: 6px; padding: 4px 12px; font: inherit; cursor: pointer; min-height: 30px;
+}
+.af-bar button:hover { background: #24345A; }
+.af-note { margin: 8px 0; padding: 8px 10px; border-radius: 6px; background: #FFF4E5; color: #6B3E00; font-size: 12.5px; }
+input[name=type]:disabled + * , label:has(> input[name=type]:disabled) { opacity: .5; }

@@ -1,0 +1,19 @@
+{
+  "name": "affidavit-filler-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sign-in, admin dashboard and access control for the Affidavit Filler. Patient PDFs never reach this server.",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "admin-code": "node src/cli.js admin-code"
+  },
+  "dependencies": {
+    "express": "5.3.0",
+    "qrcode": "1.5.4"
+  }
+}

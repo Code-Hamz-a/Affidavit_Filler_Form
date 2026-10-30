@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin — Affidavit Filler</title>
+<link rel="stylesheet" href="/assets/auth.css">
+<script src="/assets/admin.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <nav class="nav" aria-label="Admin">
+    <div class="brand">
+      <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#8FB3FF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+      Affidavit Filler
+    </div>
+    <div class="nav-links">
+      <a href="#users" aria-current="page"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.7.8 2.7 2.6 3 5.2"/></svg>Users</a>
+      <a href="#activity"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Activity log</a>
+      <a href="#security"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>Security settings</a>
+      <a href="/app/"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Open the filler tool</a>
+      <a href="/change-password"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/></svg>Change my password</a>
+    </div>
+    <div class="nav-foot">
+      <strong id="me-name">Admin</strong>
+      <span id="me-email"></span>
+      <button type="button" id="signout">Sign out</button>
+    </div>
+  </nav>
+
+  <main class="content">
+    <div class="head" id="users">
+      <div>
+        <h1>Users</h1>
+        <p class="muted small" style="margin-top:4px">Only people you add here can activate an account and sign in.</p>
+      </div>
+      <button type="button" class="btn btn-primary" id="add-user">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add user</button>
+    </div>
+    <div class="alert alert-ok" id="toast" role="status" hidden></div>
+    <div class="alert alert-warn" id="one-admin" hidden>You are the only admin. Add a second admin, so someone can still get in if you lose your password or phone.</div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="panel">
+      <div class="panel-bar">
+        <label for="search" hidden>Search users</label>
+        <input id="search" type="search" placeholder="Search name, email or mobile" aria-label="Search users">
+        <div class="chips" id="filters"></div>
+      </div>
+      <div class="table-wrap">
+        <table class="users">
+          <thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Access</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="empty" hidden>No users match.</div>
+    </div>
+
+    <div class="lower">
+      <section class="panel events" id="activity" aria-labelledby="act-h">
+        <h2 id="act-h" style="font-size:17px">Recent activity</h2>
+        <div id="events"></div>
+        <button type="button" class="btn" id="more-events" style="align-self:flex-start">Show more</button>
+      </section>
+      <section class="panel rules-box" id="security" aria-labelledby="sec-h">
+        <h2 id="sec-h" style="font-size:17px">Security settings</h2>
+        <div id="policy"></div>
+        <p class="small muted">Set on the server. Patient PDFs never reach the server — they are processed in each user’s browser.</p>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- Add / edit user -->
+<dialog id="dlg-user" aria-labelledby="u-title">
+  <form class="dlg" id="user-form" method="dialog" novalidate>
+    <div class="dlg-head">
+      <div><h2 id="u-title">Add user</h2><p class="small muted" id="u-sub"></p></div>
+      <button type="button" class="btn btn-icon" data-close aria-label="Close"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="dlg-body">
+      <div class="grid2">
+        <div class="field"><label for="u-name">Full name</label><input id="u-name" autocomplete="off" required></div>
+        <div class="field"><label for="u-email">Work email</label><input id="u-email" type="email" autocomplete="off" required></div>
+        <div class="field"><label for="u-mobile">Mobile number</label><input id="u-mobile" type="tel" autocomplete="off" required></div>
+      </div>
+      <fieldset>
+        <legend>Role</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="u-role" value="user" checked><span><b>User</b><br><span class="muted">Uses only the tools ticked below.</span></span></label>
+          <label class="choice"><input type="radio" name="u-role" value="admin"><span><b>Admin</b><br><span class="muted">All tools, plus this dashboard. Two-step required.</span></span></label>
+        </div>
+      </fieldset>
+      <fieldset id="u-access"><legend>Access</legend></fieldset>
+      <fieldset id="u-method">
+        <legend>How the user gets in</legend>
+        <label class="check top"><input type="radio" name="u-method" value="code" checked><span><b>Activation code</b> — the user sets their own password. Code valid 24 hours.</span></label>
+        <label class="check top"><input type="radio" name="u-method" value="password"><span><b>Temporary password</b> — the user must change it at first sign-in.</span></label>
+        <div class="field" id="u-pw-field" hidden>
+          <label for="u-password">Temporary password</label>
+          <input id="u-password" autocomplete="off" placeholder="Leave empty to generate a strong one">
+        </div>
+      </fieldset>
+      <label class="check" id="u-2fa-row"><input type="checkbox" id="u-2fa">Require two-step sign-in (authenticator app) for this user</label>
+      <div class="alert alert-error" id="u-error" role="alert" hidden></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary" id="u-save">Create user</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- One-time code / password -->
+<dialog id="dlg-secret" aria-labelledby="s-title">
+  <div class="dlg">
+    <div class="dlg-head"><h2 id="s-title">Give this to the user</h2></div>
+    <div class="dlg-body">
+      <p id="s-text"></p>
+      <div class="showbox">
+        <div style="display:flex; flex-direction:column; gap:2px"><span class="small muted" id="s-label"></span><span class="big-code" id="s-value"></span></div>
+        <button type="button" class="btn" id="s-copy">Copy</button>
+      </div>
+      <p class="small muted" id="s-note"></p>
+    </div>
+    <div class="dlg-foot"><button type="button" class="btn btn-primary" data-close>Done</button></div>
+  </div>
+</dialog>
+
+<!-- Reset password -->
+<dialog id="dlg-reset" aria-labelledby="r-title">
+  <form class="dlg" id="reset-form" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="r-title">Reset password</h2></div>
+    <div class="dlg-body">
+      <div class="field">
+        <label for="r-password">New temporary password</label>
+        <input id="r-password" autocomplete="off" placeholder="Leave empty to generate a strong one">
+      </div>
+      <label class="check"><input type="checkbox" checked disabled>The user must change it at next sign-in</label>
+      <label class="check"><input type="checkbox" id="r-signout" checked>Sign the user out of all devices now</label>
+      <p class="small muted">Give the password to the user in person or by phone. The activity log records that you reset it — never the password itself.</p>
+      <div class="alert alert-error" id="r-error" role="alert" hidden></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Set password</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Delete -->
+<dialog id="dlg-delete" aria-labelledby="d-title">
+  <form class="dlg" id="delete-form" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="d-title">Delete user?</h2></div>
+    <div class="dlg-body">
+      <ul style="margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; color:var(--ink-2)">
+        <li>The user is signed out everywhere and can no longer sign in.</li>
+        <li>Their entries in the activity log are kept.</li>
+        <li>To let them back in later, add them again as a new user.</li>
+      </ul>
+      <div class="field">
+        <label for="d-confirm">Type the email to confirm: <span id="d-email"></span></label>
+        <input id="d-confirm" autocomplete="off">
+      </div>
+      <div class="alert alert-error" id="d-error" role="alert" hidden></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn btn-danger" id="d-go" disabled>Delete user</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Simple confirmation -->
+<dialog id="dlg-confirm" aria-labelledby="c-title">
+  <form class="dlg" id="confirm-form" method="dialog">
+    <div class="dlg-head"><h2 id="c-title"></h2></div>
+    <div class="dlg-body"><p id="c-text"></p><div class="alert alert-error" id="c-error" role="alert" hidden></div></div>
+    <div class="dlg-foot">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary" id="c-go">OK</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

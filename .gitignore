@@ -11,3 +11,10 @@
 .vscode/
 Thumbs.db
 desktop.ini
+
+# Server: dependencies, database, secrets
+server/node_modules/
+server/data/
+server/.env
+!server/package.json
+!server/package-lock.json

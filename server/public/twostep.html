@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Two-step sign-in — Affidavit Filler</title>
+<link rel="stylesheet" href="/assets/auth.css">
+<script src="/assets/auth.js" defer></script>
+</head>
+<body data-page="twostep">
+<div class="center">
+  <div class="brand">
+    <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#1E4FBF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+    Affidavit Filler
+  </div>
+
+  <div class="card narrow" id="already" hidden>
+    <h1>Two-step sign-in is on</h1>
+    <p class="lead" id="already-text"></p>
+    <a class="btn btn-primary btn-block" href="/">Continue</a>
+  </div>
+
+  <form class="card" id="form" style="width:100%; max-width:620px" novalidate hidden>
+    <div style="display:flex; flex-direction:column; gap:6px">
+      <span class="badge badge-blue" style="align-self:flex-start" id="step-badge">Required for your account</span>
+      <h1>Turn on two-step sign-in</h1>
+      <p class="lead">Open <b>Google Authenticator</b> or <b>Microsoft Authenticator</b> on your phone, tap “+”, and scan this code.</p>
+    </div>
+    <div class="qr-row">
+      <img id="qr" alt="QR code to scan with your authenticator app">
+      <div style="flex:1 1 200px; display:flex; flex-direction:column; gap:6px" class="small muted">
+        <span>Can’t scan? In the app choose “enter a setup key” and type:</span>
+        <span class="secret" id="secret"></span>
+        <span>Account: <span id="account"></span></span>
+      </div>
+    </div>
+    <div class="field">
+      <label for="code">Enter the 6-digit code the app shows</label>
+      <input id="code" name="code" class="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required>
+      <span class="hint">The code changes every 30 seconds. This proves your phone is set up before two-step is switched on.</span>
+    </div>
+    <div class="alert alert-error" id="error" role="alert" hidden></div>
+    <button class="btn btn-primary btn-block" type="submit" id="submit">Verify</button>
+    <p class="small muted">Wrong account? <a href="#" id="signout">Sign out</a></p>
+  </form>
+
+  <div class="card print-me" id="backup" style="width:100%; max-width:620px" hidden>
+    <div style="display:flex; flex-direction:column; gap:6px">
+      <h1>Your 10 backup codes</h1>
+      <p class="lead">Two-step sign-in is on. If you lose your phone, each of these codes lets you sign in once. They are shown only now — save them somewhere safe, away from your phone.</p>
+    </div>
+    <div class="codes" id="codes"></div>
+    <div style="display:flex; flex-wrap:wrap; gap:10px">
+      <button type="button" class="btn" id="download">Download as file</button>
+      <button type="button" class="btn" id="print">Print</button>
+    </div>
+    <label class="check"><input type="checkbox" id="saved">I have saved my backup codes</label>
+    <button type="button" class="btn btn-primary btn-block" id="continue" disabled>Continue</button>
+  </div>
+</div>
+</body>
+</html>
