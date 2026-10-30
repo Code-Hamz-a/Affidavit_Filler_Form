@@ -40,6 +40,8 @@
   button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
   button.primary:hover { background: #1a4378; }
   button.big { padding: 10px 16px; font-size: 15px; width: 100%; }
+  button.soft { background: #e8f0fb; border-color: #c5d6ef; color: var(--brand); font-weight: 600; }
+  button.soft:hover { background: #d9e6f8; }
   button.icon { padding: 2px 7px; font-size: 12px; }
   button:disabled { opacity: .5; cursor: default; }
   .drop { border: 2px dashed #b9c2d0; border-radius: 8px; padding: 14px; text-align: center; color: var(--muted); cursor: pointer; background: #fafbfc; }
@@ -312,7 +314,7 @@
       <div class="msgs" id="msgs" style="margin-top:10px"></div>
       <button class="primary big" id="btn-generate">Create &amp; download PDF</button>
       <div class="row" style="margin-top:8px"><button id="btn-open" disabled>Open last PDF in a new tab</button><span id="out-info" class="hint" style="margin:0"></span></div>
-      <button class="big" id="btn-reset2" style="margin-top:10px" title="Clear everything and start a new request">New request</button>
+      <button class="big soft" id="btn-reset2" style="margin-top:10px" title="Clear everything and start a new request">New request</button>
     </div>
   </section>
 
