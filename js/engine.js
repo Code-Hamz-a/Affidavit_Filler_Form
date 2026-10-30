@@ -768,17 +768,20 @@
     // "Please hand / release copies of the records to the Officer (Notary) for photocopying…"
     if (/^please (hand|release|produce|furnish|deliver)\b/.test(q) && /officer|notary|photocopy|exhibit|attach/.test(q)) return 'yes';
     if (/^(please )?(describe|identify|list) .*not (been )?(provided|produced|handed)/.test(q)) return 'na';
+    // "If you have answered the previous question yes, please state the alterations or redactions…" — nothing was removed
+    if (/^(if (so|yes)|if you (have )?answered|(please )?(state|describe|list|identify|explain))\b/.test(q) &&
+      /alteration|redact|removed|withheld|extracted|destroyed|missing/.test(q)) return 'na';
     if (yesNo) {
       // Nothing was taken out and nothing was held back.
       // Nothing destroyed or missing, no other place or provider holding this patient's records.
-      if (/extracted|removed anything|withheld|altered|destroyed|missing|(that|which) you have not (provided|produced|handed)|^are there any (further|other|additional) (documents|records|locations|places|facilities|offices)|^are you aware of any/.test(q)) return 'no';
+      if (/extracted|removed anything|anything (been )?removed|redacted|withheld|altered|destroyed|missing|(that|which) you have not (provided|produced|handed)|^are there any (further|other|additional) (documents|records|locations|places|facilities|offices)|^are you aware of any/.test(q)) return 'no';
       // The custodian (CareCapital) does not manage the provider's accounts receivable.
       if (/responsibility to manage accounts/.test(q)) return 'no';
       // "Has your facility been paid…?" / "…been paid by private insurance, or by any person other than the patient?"
       if (/been paid by (any )?(private )?insur|paid by .*other than/.test(q)) return 'yn_others_paid';
       if (/^(has|have) (your|the|this) (facility|office|provider|practice|clinic|hospital) been paid|^have you been paid/.test(q)) return 'yn_paid';
       // Business-records foundation questions — always "Yes" for a custodian.
-      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at or near the time|shortly after|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|received? a subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
+      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at or (near|about) the time|shortly after|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|received? a subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
       return 'answer';
     }
     if (/(state|give|what is) your (full |complete )?name|^(please )?state (the )?(full )?name/.test(q)) return 'custodian';
