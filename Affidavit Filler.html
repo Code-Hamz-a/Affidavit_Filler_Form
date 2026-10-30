@@ -137,6 +137,14 @@
   .pg-cell.cut { border-color: var(--err); }
   .pg-cell.cut canvas { opacity: .25; }
   .pg-cell.cut::after { content: 'Removed'; position: absolute; top: 42%; left: 0; right: 0; color: var(--err); font-weight: 700; font-size: 14px; }
+  .pg-cell .pg-zoom { position: absolute; top: 8px; right: 8px; z-index: 2; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  .pg-grid[hidden], .pg-view[hidden] { display: none; }
+  .pg-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .pv-bar { display: flex; gap: 8px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+  .pv-scroll { overflow: auto; padding: 14px; background: #e5e7eb; flex: 1; min-height: 0; }
+  .pv-scroll canvas { display: block; margin: 0 auto; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+  .pg-view.cut canvas { opacity: .3; }
+  .pg-view.cut #pv-label { color: var(--err); font-weight: 700; }
   .subhead { font-size: 13px; margin: 14px 0 6px; }
   .fac-scroll { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
   .fac-scroll th { position: sticky; top: 0; background: #fff; }
@@ -152,7 +160,7 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v3.10 · 29 Oct 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v3.11 · 30 Oct 2026 · <b id="app-ready">Loading…</b></span>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
 
@@ -336,10 +344,20 @@
   <div class="modal-box">
     <div class="modal-head">
       <b id="pg-title"></b>
-      <span class="hint" style="margin:0; flex:1">Click a page to leave it out of the PDF. Click it again to keep it.</span>
+      <span class="hint" style="margin:0; flex:1">Click a page to leave it out of the PDF. Click it again to keep it. <b>View</b> opens the page large.</span>
       <button id="pg-done" class="primary">Done</button>
     </div>
     <div id="pg-grid" class="pg-grid"></div>
+    <div id="pg-view" class="pg-view" hidden>
+      <div class="pv-bar">
+        <button id="pv-back">← All pages</button>
+        <button id="pv-prev" class="icon" title="Previous page (←)">◀</button>
+        <button id="pv-next" class="icon" title="Next page (→)">▶</button>
+        <span id="pv-label" style="flex:1"></span>
+        <button id="pv-cut"></button>
+      </div>
+      <div id="pv-scroll" class="pv-scroll"><canvas id="pv-canvas"></canvas></div>
+    </div>
   </div>
 </div>
 
@@ -349,8 +367,8 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/engine.js?v=3.10"></script>
-<script src="js/ocr.js?v=3.10"></script>
-<script src="js/app.js?v=3.10"></script>
+<script src="js/engine.js?v=3.11"></script>
+<script src="js/ocr.js?v=3.11"></script>
+<script src="js/app.js?v=3.11"></script>
 </body>
 </html>

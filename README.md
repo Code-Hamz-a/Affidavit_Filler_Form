@@ -53,7 +53,7 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
      - **Draw**: draw on the page with a pen, for example a tick, a line or a cross. You can pick the colour and thickness. **Erase**: drag over a drawn line to remove it.
      - **Ctrl+Z** takes back the last text or line. **Esc** turns the tool off.
      - If the affidavit page itself was not recognised, it is locked. Tick **All pages**, then press **Edit this page** above it. You'll be asked to confirm, because HIPAA authorizations, letters and other forms must never be edited. **Lock page** undoes it.
-   - **Removing pages:** tick **All pages** above the preview and press **Remove page** on any page of the request (press **Undo** to bring it back). For records and invoices, press **Pages** next to the file and click the pages to leave out. The page count, invoice totals and DOS update automatically.
+   - **Removing pages:** tick **All pages** above the preview and press **Remove page** on any page of the request (press **Undo** to bring it back). For records and invoices, press **Pages** next to the file and click the pages to leave out. To read a page first, press **View** on it: the page opens large, **◀ ▶** (or the arrow keys) go to the other pages, **Remove this page** / **Keep this page** decides, and **← All pages** (or Esc) goes back. The page count, invoice totals and DOS update automatically.
 6. **Create & download PDF**. The file name is filled in automatically:
    - Records: `Patient Name_affidavit.pdf`
    - Billing: `Patient Name_bill_affidavit.pdf`

@@ -494,20 +494,28 @@
 
   // ------------------------------------------------------------ derived values
   // Page picker for a record / invoice file: click a thumbnail to leave that page out of the PDF.
-  let pickerDoc = null;
+  let pickerDoc = null, pickerAtt = null, pickerCells = [], viewAt = -1, viewTask = null;
+  function toggleCut(k) {
+    const a = pickerAtt, i = a.keep[k];
+    if (a.cut.has(i)) a.cut.delete(i); else a.cut.add(i);
+    pickerCells[k].classList.toggle('cut', a.cut.has(i));
+  }
   async function openPagePicker(a) {
     if (!a) return;
     const modal = $('#pg-modal'), grid = $('#pg-grid');
     $('#pg-title').textContent = a.name;
     grid.innerHTML = '';
+    closePageView();
     modal.hidden = false;
     a.cut = a.cut || new Set();
-    const cells = a.keep.map(i => {
+    pickerAtt = a;
+    const cells = pickerCells = a.keep.map((i, k) => {
       const cell = document.createElement('div');
       cell.className = 'pg-cell' + (a.cut.has(i) ? ' cut' : '');
-      cell.innerHTML = `<canvas></canvas><span>Page ${i + 1}</span>`;
+      cell.innerHTML = `<button class="icon pg-zoom" title="Open this page large">View</button><canvas></canvas><span>Page ${i + 1}</span>`;
       cell.title = 'Click to remove / keep this page';
-      cell.onclick = () => { if (a.cut.has(i)) a.cut.delete(i); else a.cut.add(i); cell.classList.toggle('cut', a.cut.has(i)); };
+      cell.onclick = () => toggleCut(k);
+      cell.querySelector('.pg-zoom').onclick = e => { e.stopPropagation(); showPage(k); };
       grid.appendChild(cell);
       return cell;
     });
@@ -522,7 +530,49 @@
       await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
     }
   }
+  // One page at reading size, so it can be checked before it is removed.
+  async function showPage(k) {
+    const a = pickerAtt, doc = pickerDoc;
+    if (!a || !doc) return;
+    viewAt = Math.max(0, Math.min(a.keep.length - 1, k));
+    const i = a.keep[viewAt];
+    $('#pg-grid').hidden = true; $('#pg-view').hidden = false;
+    $('#pv-prev').disabled = viewAt === 0; $('#pv-next').disabled = viewAt === a.keep.length - 1;
+    syncPageView();
+    const page = await doc.getPage(i + 1);
+    if (doc !== pickerDoc || viewAt < 0 || a.keep[viewAt] !== i) return; // moved on meanwhile
+    const box = $('#pv-scroll'), c = $('#pv-canvas');
+    const w = Math.max(300, box.clientWidth - 28), dpr = window.devicePixelRatio || 1;
+    const vp = page.getViewport({ scale: w * dpr / page.getViewport({ scale: 1 }).width });
+    if (viewTask) viewTask.cancel();
+    c.width = vp.width; c.height = vp.height; c.style.width = w + 'px';
+    box.scrollTop = 0;
+    viewTask = page.render({ canvasContext: c.getContext('2d'), viewport: vp });
+    try { await viewTask.promise; } catch (e) { /* cancelled by a newer page */ }
+  }
+  function syncPageView() {
+    const a = pickerAtt, i = a.keep[viewAt], cut = a.cut.has(i);
+    $('#pg-view').classList.toggle('cut', cut);
+    $('#pv-label').textContent = `Page ${i + 1} (${viewAt + 1} of ${a.keep.length})` + (cut ? ' · Removed' : '');
+    $('#pv-cut').textContent = cut ? 'Keep this page' : 'Remove this page';
+  }
+  function closePageView() {
+    viewAt = -1;
+    if (viewTask) { viewTask.cancel(); viewTask = null; }
+    $('#pg-view').hidden = true; $('#pg-grid').hidden = false;
+  }
+  $('#pv-back').addEventListener('click', closePageView);
+  $('#pv-prev').addEventListener('click', () => showPage(viewAt - 1));
+  $('#pv-next').addEventListener('click', () => showPage(viewAt + 1));
+  $('#pv-cut').addEventListener('click', () => { toggleCut(viewAt); syncPageView(); });
+  document.addEventListener('keydown', e => {
+    if ($('#pg-modal').hidden || viewAt < 0 || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.key === 'ArrowLeft' && viewAt > 0) { e.preventDefault(); showPage(viewAt - 1); }
+    else if (e.key === 'ArrowRight' && viewAt < pickerAtt.keep.length - 1) { e.preventDefault(); showPage(viewAt + 1); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePageView(); }
+  }, true);
   $('#pg-done').addEventListener('click', () => {
+    closePageView();
     $('#pg-modal').hidden = true;
     if (pickerDoc) { pickerDoc.destroy(); pickerDoc = null; }
     renderAttachments(); refresh();
