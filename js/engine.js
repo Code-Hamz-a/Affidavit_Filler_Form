@@ -43,6 +43,8 @@
     yes: 'Answer: Yes',
     no: 'Answer: No',
     na: 'Answer: Not applicable',
+    hand_upload: 'Answer: No, uploaded to ChartSwap / ChartX',
+    release_upload: 'Answer: Yes, uploaded to ChartSwap / ChartX',
     archive: 'Answer: archive (no records found?)',
     all_provided: 'Answer: provided all records',
     no_knowledge: 'Answer: no information (other providers)',
@@ -351,6 +353,12 @@
   };
   AE.fullText = function (pages) {
     return pages.map(p => AE.pageLines(p).map(l => l.text).join('\n')).join('\n');
+  };
+  // The upload portal a request names ("ChartSwap" / "ChartX"); null when it names neither, or both equally.
+  AE.portalOf = function (text) {
+    const swap = (String(text).match(/\bchart ?swap\b/gi) || []).length;
+    const x = (String(text).match(/\bchart ?x\b(?![-\w])/gi) || []).length;
+    return swap > x ? 'ChartSwap' : x > swap ? 'ChartX' : null;
   };
 
   // ------------------------------------------------------ blank detection
@@ -765,8 +773,11 @@
     // The provider's insurance contracts and questions that depend on an earlier answer — the custodian answers these
     // (usually "Not applicable"); the answer is remembered for the next subpoena with the same question.
     if (/managed care|contractual arrangement|terms of .*coverage|preceding (two|three|four|\d+) questions/.test(q)) return 'answer';
-    // "Please hand / release copies of the records to the Officer (Notary) for photocopying…"
-    if (/^please (hand|release|produce|furnish|deliver)\b/.test(q) && /officer|notary|photocopy|exhibit|attach/.test(q)) return 'yes';
+    // Records are never handed over in person — they are uploaded to ChartSwap / ChartX.
+    // "Please hand … to the Officer (Notary)…" / "Have you handed the records to the Officer?" → "No, uploaded to …"
+    if (/^please hand\b|\bhave you (now )?handed\b/.test(q) && /officer|notary/.test(q)) return 'hand_upload';
+    // "Please release / produce copies of the records to the Officer for photocopying…" → "Yes, uploaded to …"
+    if (/^please (hand|release|produce|furnish|deliver)\b/.test(q) && /officer|notary|photocopy|exhibit|attach/.test(q)) return 'release_upload';
     if (/^(please )?(describe|identify|list) .*not (been )?(provided|produced|handed)/.test(q)) return 'na';
     // "If you have answered the previous question yes, please state the alterations or redactions…" — nothing was removed
     if (/^(if (so|yes)|if you (have )?answered|(please )?(state|describe|list|identify|explain))\b/.test(q) &&
@@ -827,6 +838,8 @@
       case 'yes': return 'Yes';
       case 'no': return 'No';
       case 'na': return 'Not applicable';
+      case 'hand_upload': return `No, uploaded to ${d.portal || 'ChartSwap'}`;
+      case 'release_upload': return `Yes, uploaded to ${d.portal || 'ChartSwap'}`;
       // the custodian's standard wording (from a filled LORR DWQ)
       case 'archive': return 'Archive';
       case 'all_provided': return `I have provided all ${d.type === 'billing' ? 'billing' : 'medical'} records under my care and possession.`;

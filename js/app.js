@@ -205,6 +205,9 @@
       const ocrCount = await ocrScannedPages(r);
       const info = AE.parseRequest(r.pages);
       const blanks = AE.findBlanks(r.pages);
+      // Upload portal for "hand the records to the Officer" answers: the one the request names, else the last one used.
+      const portal = AE.portalOf(AE.fullText(r.pages));
+      if (portal) { $('#f-portal').value = portal; settings.portal = portal; saveSettings(); }
       if (S.req && S.req.doc) S.req.doc.destroy();
       S.req = { name: file.name, bytes, doc: r.doc, pages: r.pages, info, cut: new Set(), allBlanks: blanks }; // cut = pages the user removed
       S.manual = {};
@@ -613,7 +616,7 @@
       insPaid: AE.parseMoney(val('f-ins-paid')) || 0, medPaid: AE.parseMoney(val('f-med-paid')) || 0,
       ptPaid: AE.parseMoney(val('f-pt-paid')) || 0, adjust: AE.parseMoney(val('f-adjust')) || 0,
       lien: AE.parseMoney(val('f-lien')),
-      fillSworn: $('#f-fill-sworn').checked, swornDate: sd
+      fillSworn: $('#f-fill-sworn').checked, swornDate: sd, portal: $('#f-portal').value
     };
   }
 
@@ -744,6 +747,8 @@
   }
   ['f-writeoff', 'f-paid', 'f-ins-paid', 'f-med-paid', 'f-pt-paid', 'f-adjust', 'f-lien'].forEach(id => $('#' + id).addEventListener('input', refresh));
   ['f-sworn-date', 'f-fill-sworn', 'f-keep', 'f-standard'].forEach(id => $('#' + id).addEventListener('change', refresh));
+  $('#f-portal').value = settings.portal === 'ChartX' ? 'ChartX' : 'ChartSwap';
+  $('#f-portal').addEventListener('change', () => { settings.portal = $('#f-portal').value; saveSettings(); refresh(); });
   ['f-patient', 'f-dob'].forEach(id => $('#' + id).addEventListener('change', () => { analyzeAttachments(true); refresh(); }));
 
   // ------------------------------------------------------------ blanks table
