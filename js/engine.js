@@ -58,6 +58,7 @@
     custodian_title_addr: 'Name + address + title',
     amt_balance_whom: '$ Outstanding balance + who owes it',
     employer_address: 'Employer + business address',
+    custodian_employer: 'Name + employer + business address',
     amt_ins_paid: '$ Paid by insurance',
     amt_payor_paid: '$ Paid by insurance / Medicaid / Medicare',
     amt_collection: '$ Turned over for collection',
@@ -778,6 +779,8 @@
     if (/^please hand\b|\bhave you (now )?handed\b/.test(q) && /officer|notary/.test(q)) return 'hand_upload';
     // "Please release / produce copies of the records to the Officer for photocopying…" → "Yes, uploaded to …"
     if (/^please (hand|release|produce|furnish|deliver)\b/.test(q) && /officer|notary|photocopy|exhibit|attach/.test(q)) return 'release_upload';
+    // "Please attach the copies of the records… Have you complied?" → "Yes, uploaded to …"
+    if (/^please attach\b/.test(q) && /\brecords?\b/.test(q)) return 'release_upload';
     if (/^(please )?(describe|identify|list) .*not (been )?(provided|produced|handed)/.test(q)) return 'na';
     // "If you have answered the previous question yes, please state the alterations or redactions…" — nothing was removed
     if (/^(if (so|yes)|if you (have )?answered|(please )?(state|describe|list|identify|explain))\b/.test(q) &&
@@ -792,9 +795,11 @@
       if (/been paid by (any )?(private )?insur|paid by .*other than/.test(q)) return 'yn_others_paid';
       if (/^(has|have) (your|the|this) (facility|office|provider|practice|clinic|hospital) been paid|^have you been paid/.test(q)) return 'yn_paid';
       // Business-records foundation questions — always "Yes" for a custodian.
-      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at or (near|about) the time|shortly after|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|received? a subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
+      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at,? (or )?(near|about) the time|shortly after|reasonably soon|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|(received?|accept(ed)?) (a |the )?subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
       return 'answer';
     }
+    // "Please state your full name and the name and address of your employer."
+    if (/your (full |complete )?name\b.*\bemployer/.test(q)) return 'custodian_employer';
     if (/(state|give|what is) your (full |complete )?name|^(please )?state (the )?(full )?name/.test(q)) return 'custodian';
     if (/by whom (are )?you (are )?employed|who (is your employer|employs you|do you work for)|name of (your )?employer|employer'?s name/.test(q))
       return /address/.test(q) ? 'employer_address' : 'facility';
@@ -885,6 +890,7 @@
       // "Total amount still owed and by whom" → "$147,717.77, Jane Doe"
       case 'amt_balance_whom': return d.balance == null ? '' : (+d.balance || 0) > 0 && d.patient ? `${money(d.balance)}, ${d.patient}` : money(d.balance);
       case 'employer_address': return [d.facility, d.address].filter(Boolean).join(', ');
+      case 'custodian_employer': return [d.custodian, d.facility, d.address].filter(Boolean).join(', ');
       case 'no_info': return d.noInfo || '';
       case 'retention': return d.retention || '';
       case 'notary_day': return d.fillSworn ? String(sd.getDate()) : '';
