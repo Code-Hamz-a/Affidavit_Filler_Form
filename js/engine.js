@@ -47,7 +47,9 @@
     release_upload: 'Answer: Yes, uploaded to ChartSwap / ChartX',
     archive: 'Answer: archive (no records found?)',
     all_provided: 'Answer: provided all records',
-    no_knowledge: 'Answer: no information (other providers)',
+    no_knowledge: 'Answer: no information (custodian of records)',
+    payor_names: 'Answer: names of who paid (no information if nobody did)',
+    yes_payments: 'Answer: Yes (+ no payment has been made)',
     yes_pages: 'Answer: Yes + number of pages',
     yn_paid: 'Answer: been paid? (Yes / No)',
     yn_others_paid: 'Answer: paid by insurance or others? (Yes / No)',
@@ -771,9 +773,10 @@
     // Other providers that may hold records — a custodian cannot know
     if (/^are you aware of any other (hospital|clinic|physician|doctor|provider|facility)/.test(q)) return 'no_knowledge';
     if (/how long.*(maintain|kept|retain)|retention|before destruction/.test(q)) return 'retention';
-    // The provider's insurance contracts and questions that depend on an earlier answer — the custodian answers these
-    // (usually "Not applicable"); the answer is remembered for the next subpoena with the same question.
-    if (/managed care|contractual arrangement|terms of .*coverage|preceding (two|three|four|\d+) questions/.test(q)) return 'answer';
+    // "…please write the name of the private insurer… and the total amount paid by each" — only asked when someone else paid
+    if (/name of the (private )?insurer/.test(q) && /amount|paid/.test(q)) return 'payor_names';
+    // The provider's contracts, sold accounts and insurance terms — a custodian cannot know these.
+    if (/managed care|contractual arrangement|terms of .*coverage|preceding (two|three|four|\d+) questions|purchased or assigned|purchasing third party|contracts? or agreements?|contract\(s\)|contract with medicare/.test(q)) return 'no_knowledge';
     // Records are never handed over in person — they are uploaded to ChartSwap / ChartX.
     // "Please hand … to the Officer (Notary)…" / "Have you handed the records to the Officer?" → "No, uploaded to …"
     if (/^please hand\b|\bhave you (now )?handed\b/.test(q) && /officer|notary/.test(q)) return 'hand_upload';
@@ -794,8 +797,10 @@
       // "Has your facility been paid…?" / "…been paid by private insurance, or by any person other than the patient?"
       if (/been paid by (any )?(private )?insur|paid by .*other than/.test(q)) return 'yn_others_paid';
       if (/^(has|have) (your|the|this) (facility|office|provider|practice|clinic|hospital) been paid|^have you been paid/.test(q)) return 'yn_paid';
+      // "Has X made or caused to be made any billing records… any payments made by the patient?"
+      if (/made or caused to be made/.test(q) && /\bpayments?\b/.test(q)) return 'yes_payments';
       // Business-records foundation questions — always "Yes" for a custodian.
-      if (/custodian|regular(ly)? (course|practice|conducted)|course of regularly|at,? (or )?(near|about) the time|shortly after|reasonably soon|maintained as required|as required by (the )?regulations|photographed on|attached to each (film|cd|dvd|image|x-?ray)|aid in (the )?(treatment|diagnosis)|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|(received?|accept(ed)?) (a |the )?subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
+      if (/custodian|provider under (medicare|medicaid)|regular(ly)? (course|practice|conducted)|course of regularly|at,? (or )?(near|about) the time|shortly after|reasonably soon|maintained as required|as required by (the )?regulations|photographed on|attached to each (film|cd|dvd|image|x-?ray)|aid in (the )?(treatment|diagnosis)|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|(received?|accept(ed)?) (a |the )?subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
       return 'answer';
     }
     // "Please state your full name and the name and address of your employer."
@@ -825,7 +830,7 @@
     if (/paid by (the |any )?(private )?insur|paid by the third[- ]party payor/.test(q)) return /amount|paid/.test(q) ? 'amt_ins_paid' : 'answer';
     if (/medicare|medicaid/.test(q)) return /amount|paid/.test(q) ? 'amt_med_paid' : 'answer';
     if (/third[- ]party payor/.test(q)) return /amount|paid/.test(q) ? 'amt_ins_paid' : 'answer';
-    if (/contractual adjustment/.test(q)) return 'amt_adjust';
+    if (/contractual (agreement )?adjustment/.test(q)) return 'amt_adjust';
     if (/written off|charged off|write[- ]?off/.test(q)) return 'amt_writeoff';
     if (/balance|still owed|outstanding|amount owed|unpaid|right to be paid/.test(q)) return 'amt_balance';
     if (/total amount paid|amount paid for services|been paid/.test(q)) return 'amt_paid';
@@ -849,6 +854,10 @@
       case 'archive': return 'Archive';
       case 'all_provided': return `I have provided all ${d.type === 'billing' ? 'billing' : 'medical'} records under my care and possession.`;
       case 'no_knowledge': return `I do not have that information, I am the custodian of records, I maintain and produce ${d.type === 'billing' ? 'billing' : 'medical'} records.`;
+      // Nobody else paid: the standard answer. Someone did: stays empty (red) so the names and amounts get typed in.
+      case 'payor_names': return (+d.insPaid || 0) + (+d.medPaid || 0) > 0 ? '' : AE.valueFor('no_knowledge', d);
+      // Payments are only entered for billing requests, so a records request can't say nothing was paid.
+      case 'yes_payments': return d.type !== 'billing' || (+d.paid || 0) + (+d.insPaid || 0) + (+d.medPaid || 0) + (+d.ptPaid || 0) > 0 ? 'Yes' : 'Yes, but no payment has been made';
       case 'yes_pages': return d.pages != null && d.pages !== '' ? `Yes, ${d.pages} pages` : 'Yes';
       case 'yn_paid': return (+d.paid || 0) > 0 ? 'Yes' : 'No';
       case 'yn_others_paid': return (+d.insPaid || 0) + (+d.medPaid || 0) > 0 ? 'Yes' : 'No';
