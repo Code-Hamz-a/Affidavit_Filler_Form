@@ -34,6 +34,7 @@
     amt_writeoff: '$ Written off',
     amt_paid: '$ Paid to date',
     amt_balance: '$ Outstanding balance',
+    amt_sought: '$ Balance still sought from the patient',
     amt_paid_plus_balance: '$ Paid + outstanding',
     notary_day: 'Sworn date — day',
     notary_month: 'Sworn date — month',
@@ -43,8 +44,6 @@
     yes: 'Answer: Yes',
     no: 'Answer: No',
     na: 'Answer: Not applicable',
-    hand_upload: 'Answer: No, uploaded to ChartSwap / ChartX',
-    release_upload: 'Answer: Yes, uploaded to ChartSwap / ChartX',
     archive: 'Answer: archive (no records found?)',
     all_provided: 'Answer: provided all records',
     no_knowledge: 'Answer: no information (custodian of records)',
@@ -356,12 +355,6 @@
   };
   AE.fullText = function (pages) {
     return pages.map(p => AE.pageLines(p).map(l => l.text).join('\n')).join('\n');
-  };
-  // The upload portal a request names ("ChartSwap" / "ChartX"); null when it names neither, or both equally.
-  AE.portalOf = function (text) {
-    const swap = (String(text).match(/\bchart ?swap\b/gi) || []).length;
-    const x = (String(text).match(/\bchart ?x\b(?![-\w])/gi) || []).length;
-    return swap > x ? 'ChartSwap' : x > swap ? 'ChartX' : null;
   };
 
   // ------------------------------------------------------ blank detection
@@ -777,13 +770,11 @@
     if (/name of the (private )?insurer/.test(q) && /amount|paid/.test(q)) return 'payor_names';
     // The provider's contracts, sold accounts and insurance terms — a custodian cannot know these.
     if (/managed care|contractual arrangement|terms of .*coverage|preceding (two|three|four|\d+) questions|purchased or assigned|purchasing third party|contracts? or agreements?|contract\(s\)|contract with medicare/.test(q)) return 'no_knowledge';
-    // Records are never handed over in person — they are uploaded to ChartSwap / ChartX.
-    // "Please hand … to the Officer (Notary)…" / "Have you handed the records to the Officer?" → "No, uploaded to …"
-    if (/^please hand\b|\bhave you (now )?handed\b/.test(q) && /officer|notary/.test(q)) return 'hand_upload';
-    // "Please release / produce copies of the records to the Officer for photocopying…" → "Yes, uploaded to …"
-    if (/^please (hand|release|produce|furnish|deliver)\b/.test(q) && /officer|notary|photocopy|exhibit|attach/.test(q)) return 'release_upload';
-    // "Please attach the copies of the records… Have you complied?" → "Yes, uploaded to …"
-    if (/^please attach\b/.test(q) && /\brecords?\b/.test(q)) return 'release_upload';
+    // "Please hand / release / produce the records to the Officer (Notary)…" / "Have you handed the records to the Officer?"
+    if (/\bhave you (now )?handed\b/.test(q) && /officer|notary/.test(q)) return 'yes';
+    if (/^please (hand|release|produce|furnish|deliver)\b/.test(q) && /officer|notary|photocopy|exhibit|attach/.test(q)) return 'yes';
+    // "Please attach the copies of the records… Have you complied?"
+    if (/^please attach\b/.test(q) && /\brecords?\b/.test(q)) return 'yes';
     if (/^(please )?(describe|identify|list) .*not (been )?(provided|produced|handed)/.test(q)) return 'na';
     // "If you have answered the previous question yes, please state the alterations or redactions…" — nothing was removed
     if (/^(if (so|yes)|if you (have )?answered|(please )?(state|describe|list|identify|explain))\b/.test(q) &&
@@ -815,7 +806,8 @@
     // "…which have been paid by the patient themselves (and not by private insurance or some other person)?"
     if (/paid/.test(q) && /\b(themselves|himself|herself)\b|\(and not by/.test(q)) return 'amt_pt_paid';
     // "What amount of the said current balance does the provider continue to seek from the patient…?"
-    if (/(said|current) balance|continue to seek/.test(q)) return 'amt_balance';
+    if (/continue to seek/.test(q)) return 'amt_sought';
+    if (/(said|current) balance/.test(q)) return 'amt_balance';
     if (/total amount (still )?owed and by whom|owed,? and by whom/.test(q)) return 'amt_balance_whom';
     if (/total amount (actually )?paid by all|paid by all payors/.test(q)) return 'amt_paid';
     if (/out[- ]of[- ]pocket/.test(q) && /amount|paid/.test(q)) return 'amt_pt_paid';
@@ -848,8 +840,6 @@
       case 'yes': return 'Yes';
       case 'no': return 'No';
       case 'na': return 'Not applicable';
-      case 'hand_upload': return `No, uploaded to ${d.portal || 'ChartSwap'}`;
-      case 'release_upload': return `Yes, uploaded to ${d.portal || 'ChartSwap'}`;
       // the custodian's standard wording (from a filled LORR DWQ)
       case 'archive': return 'Archive';
       case 'all_provided': return `I have provided all ${d.type === 'billing' ? 'billing' : 'medical'} records under my care and possession.`;
@@ -884,6 +874,7 @@
       case 'amt_writeoff': return money(d.writeoff);
       case 'amt_paid': return money(d.paid);
       case 'amt_balance': return d.balance == null ? '' : money(d.balance);
+      case 'amt_sought': return money(0);
       case 'amt_paid_plus_balance': return d.balance == null ? '' : money((+d.paid || 0) + (+d.balance || 0));
       case 'amt_ins_paid': return money(d.insPaid);
       // self-pay accounts: nothing sent to collections and nothing owed by a payor unless entered
