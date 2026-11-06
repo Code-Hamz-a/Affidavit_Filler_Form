@@ -271,7 +271,7 @@
   // Renders one page and reads its words with the built-in OCR; the words come back as text items in PDF points.
   // inkOnly keeps only near-black ink: a claim form printed in red or grey (CMS-1500, UB-04) turns white
   // and only the typed values stay, which the OCR reads far more reliably.
-  async function ocrPage(doc, num, scale, inkOnly) {
+  async function renderPage(doc, num, scale) {
     const page = await doc.getPage(num);
     const vp = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
@@ -279,6 +279,19 @@
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    return { vp, canvas, ctx };
+  }
+  async function readItems(img, vp) {
+    const words = await window.OCR.readCanvas(img);
+    return words.map(wd => {
+      const [xa, ya] = vp.convertToPdfPoint(wd.left, wd.lineBottom);
+      const [xb, yb] = vp.convertToPdfPoint(wd.left + wd.width, wd.lineTop);
+      const lineH = Math.abs(yb - ya);
+      return { str: wd.text, x: Math.min(xa, xb), y: Math.min(ya, yb) + lineH * 0.2, w: Math.abs(xb - xa), h: Math.min(Math.max(lineH * 0.8, 6), 16), font: 'ocr', conf: wd.conf };
+    });
+  }
+  async function ocrPage(doc, num, scale, inkOnly) {
+    const { vp, canvas, ctx } = await renderPage(doc, num, scale);
     let img = canvas;
     if (inkOnly) {
       img = document.createElement('canvas');
@@ -290,38 +303,40 @@
       }
       img.getContext('2d').putImageData(im, 0, 0);
     }
-    const words = await window.OCR.readCanvas(img);
-    const items = words.map(wd => {
-      const [xa, ya] = vp.convertToPdfPoint(wd.left, wd.lineBottom);
-      const [xb, yb] = vp.convertToPdfPoint(wd.left + wd.width, wd.lineTop);
-      const lineH = Math.abs(yb - ya);
-      return { str: wd.text, x: Math.min(xa, xb), y: Math.min(ya, yb) + lineH * 0.2, w: Math.abs(xb - xa), h: Math.min(Math.max(lineH * 0.8, 6), 16), font: 'ocr' };
-    });
+    const items = await readItems(img, vp);
     return { items, vp, canvas, ctx };
   }
 
-  // Scanned pages (only a picture, no text) are read with the built-in OCR so their blanks can be found.
+  // Scanned or faxed pages are read with the built-in OCR so their blanks can be found. The printed lines are found
+  // in the pixels first and whitened from the copy the OCR reads; the page itself is not changed.
+  const SCAN_SCALE = 3.5;
   async function ocrScannedPages(r) {
-    const scanned = r.pages.filter(p => p.items.length < 5);
+    const scanned = r.pages.filter(p => AE.isScanPage(p));
     if (!scanned.length) return 0;
     for (let k = 0; k < scanned.length; k++) {
       const p = scanned[k];
       busy(true, `Scanned PDF — reading the text (OCR), page ${k + 1} of ${scanned.length}…` + (k === 0 ? ' (first page takes a few seconds longer)' : ''));
       await new Promise(res => setTimeout(res, 30)); // let the message show
-      let o;
-      try { o = await ocrPage(r.doc, p.num, 2.6, false); }
-      catch (e) { console.error(e); alert('OCR could not read the scanned pages: ' + e.message); return 0; }
-      const { vp, canvas, ctx } = o;
-      p.items = o.items;
-      // The blanks on a scan are drawn lines in the picture — find them in the pixels.
-      const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      const gray = new Uint8Array(canvas.width * canvas.height);
-      for (let i = 0, j = 0; j < gray.length; i += 4, j++) gray[j] = (img[i] * 0.3 + img[i + 1] * 0.59 + img[i + 2] * 0.11) | 0;
-      p.hlines = AE.detectImageLines(gray, canvas.width, canvas.height).map(l => {
-        const [xa, ya] = vp.convertToPdfPoint(l.x0, l.y);
-        const [xb] = vp.convertToPdfPoint(l.x1, l.y);
-        return { x: Math.min(xa, xb), y: ya, w: Math.abs(xb - xa) };
-      });
+      try {
+        const { vp, canvas, ctx } = await renderPage(r.doc, p.num, SCAN_SCALE);
+        const W = canvas.width, H = canvas.height;
+        const im = ctx.getImageData(0, 0, W, H), d = im.data;
+        const gray = new Uint8Array(W * H);
+        for (let i = 0, j = 0; j < gray.length; i += 4, j++) gray[j] = (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) | 0;
+        AE.despeckle(gray, W, H, { ppt: SCAN_SCALE });
+        const lines = AE.detectImageLines(gray, W, H, { ppt: SCAN_SCALE });
+        p.hlines = lines.map(l => {
+          const [xa, ya] = vp.convertToPdfPoint(l.x0, l.y);
+          const [xb] = vp.convertToPdfPoint(l.x1, l.y);
+          const yAt = (x, y) => vp.convertToPdfPoint(x, y)[1];
+          return { x: Math.min(xa, xb), y: ya, w: Math.abs(xb - xa), yL: xa <= xb ? yAt(l.x0, l.yL) : yAt(l.x1, l.yR), yR: xa <= xb ? yAt(l.x1, l.yR) : yAt(l.x0, l.yL) };
+        });
+        AE.eraseImageLines(gray, W, H, lines, { ppt: SCAN_SCALE });
+        AE.stretchContrast(gray);
+        for (let i = 0, j = 0; j < gray.length; i += 4, j++) d[i] = d[i + 1] = d[i + 2] = gray[j];
+        ctx.putImageData(im, 0, 0);
+        p.items = AE.cleanOcrItems(await readItems(canvas, vp));
+      } catch (e) { console.error(e); alert('OCR could not read the scanned pages: ' + e.message); return 0; }
       p.ocr = true;
       p._lines = null;
     }

@@ -170,11 +170,20 @@
       // Real glyph widths for fonts used by blanks (exact positions inside a text run), and the drawn
       // horizontal lines — Word often makes a blank by underlining spaces, which leaves no "____" text.
       const fontWidths = {};
-      let hlines = [];
+      let hlines = [], imagePixels = 0;
       if (opts.fonts !== false) {
         try {
           const ol = await page.getOperatorList();
           hlines = horizontalLines(ol, pdfjsLib.OPS);
+          // A scanner or fax machine puts the page in as one big picture (sometimes cut in strips).
+          const O = pdfjsLib.OPS;
+          let pixels = 0;
+          ol.fnArray.forEach((fn, i) => {
+            const a = ol.argsArray[i];
+            if (fn === O.paintImageXObject) pixels += (a[1] || 0) * (a[2] || 0);
+            else if (fn === O.paintImageMaskXObject || fn === O.paintInlineImageXObject) pixels += ((a[0] && a[0].width) || 0) * ((a[0] && a[0].height) || 0);
+          });
+          imagePixels = pixels;
           for (const name of new Set(items.filter(it => /_{3,}/.test(it.str)).map(it => it.font))) {
             try { fontWidths[name] = glyphWidths(page.commonObjs.get(name)); } catch (e) { /* fall back to Helvetica */ }
           }
@@ -199,7 +208,7 @@
       const visibleItems = whiteouts.length ? hideUnder(items, whiteouts) : items;
       const view = page.view; // [x0, y0, x1, y1] user space
       pages.push({ num: p, width: view[2] - view[0], height: view[3] - view[1], x0: view[0], y0: view[1], rotate: page.rotate,
-        items: visibleItems, fontWidths, hlines, whiteouts });
+        items: visibleItems, fontWidths, hlines, whiteouts, imagePixels });
     }
     return { doc, numPages: doc.numPages, pages };
   };
@@ -227,35 +236,285 @@
     return out;
   }
 
+  // The paper and ink tones of a scan: a fax or a faded copy has grey paper or grey ink.
+  AE.inkLevels = function (gray) {
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
+    let bg = 128;
+    for (let v = 128; v < 256; v++) if (hist[v] > hist[bg]) bg = v;
+    let sum = 0, cnt = 0;
+    for (let v = 0; v < bg - 50; v++) { sum += v * hist[v]; cnt += hist[v]; }
+    return { bg, ink: cnt ? sum / cnt : Math.max(0, bg - 120) };
+  };
+
   /*
-   * Underlines in a scanned page are only pixels. Finds thin, long, dark horizontal runs in a greyscale image
-   * (one byte per pixel) and returns them in pixel coordinates: [{ x0, x1, y }] (y = bottom row of the line).
-   * Letters never make long unbroken runs, so only blanks, signature lines and rules come back.
+   * Underlines in a scanned page are only pixels. Finds thin, long, dark horizontal lines in a greyscale image
+   * (one byte per pixel) and returns them in pixel coordinates: [{ x0, x1, y, yL, yR }] (y = bottom row of the line in
+   * its middle, yL / yR at its two ends). A crooked scan draws a line as a staircase and a fax breaks it into pieces,
+   * so pieces that continue each other are joined. Letters do not pass: their strokes stand tall above the "line".
+   * opts.ppt = pixels per PDF point.
    */
   AE.detectImageLines = function (gray, w, h, opts) {
     opts = opts || {};
-    const dark = opts.threshold || 140, minLen = opts.minLen || Math.round(w * 0.035), maxGap = 3, maxThick = opts.maxThick || 6;
-    const runs = [];
+    const ppt = opts.ppt || w / 612;
+    const lv = AE.inkLevels(gray);
+    const dark = opts.threshold || Math.round(lv.ink + 0.62 * (lv.bg - lv.ink));
+    const minPiece = Math.max(10, Math.round(5 * ppt)), minLen = opts.minLen || Math.round(w * 0.035);
+    const maxGap = Math.max(3, Math.round(1.2 * ppt)), maxThick = opts.maxThick || Math.max(4, Math.round(3 * ppt));
+    const stair = maxGap * 2, bridge = Math.round(8 * ppt);
+    // 1. long dark runs on each pixel row, chained into lines from row to row
+    let pieces = [], active = [];
     for (let y = 0; y < h; y++) {
       const row = y * w;
+      active = active.filter(l => l.lastY >= y - 2);
       let start = -1, lastDark = -10;
       for (let x = 0; x <= w; x++) {
         const isDark = x < w && gray[row + x] < dark;
         if (isDark) { if (start < 0) start = x; lastDark = x; }
         else if (start >= 0 && x - lastDark > maxGap) {
-          if (lastDark - start + 1 >= minLen) runs.push({ x0: start, x1: lastDark, y0: y, y1: y });
+          if (lastDark - start + 1 >= minPiece) {
+            const r = { x0: start, x1: lastDark, y };
+            let l = active.find(o => o.segs.some(s => y - s.y <= 2 && Math.max(s.x0, r.x0) - Math.min(s.x1, r.x1) <= stair));
+            if (!l) { l = { segs: [], lastY: y }; pieces.push(l); active.push(l); }
+            l.segs.push(r); l.lastY = y;
+          }
           start = -1;
         }
       }
     }
-    // stack the rows of one line together (a line is 1–5 px thick)
-    const lines = [];
-    for (const r of runs) {
-      const l = lines.find(o => r.y0 - o.y1 <= 1 && Math.min(o.x1, r.x1) - Math.max(o.x0, r.x0) > 0.6 * Math.min(o.x1 - o.x0, r.x1 - r.x0));
-      if (l) { l.x0 = Math.min(l.x0, r.x0); l.x1 = Math.max(l.x1, r.x1); l.y1 = r.y1; }
-      else lines.push({ ...r });
+    // 2. a straight line through each piece
+    const fit = l => {
+      l.x0 = Math.min(...l.segs.map(s => s.x0)); l.x1 = Math.max(...l.segs.map(s => s.x1));
+      let W = 0, mx = 0, my = 0;
+      for (const s of l.segs) { const n = s.x1 - s.x0 + 1; W += n; mx += n * (s.x0 + s.x1) / 2; my += n * s.y; }
+      mx /= W; my /= W;
+      let sxy = 0, sxx = 0;
+      for (const s of l.segs) { const n = s.x1 - s.x0 + 1, dx = (s.x0 + s.x1) / 2 - mx; sxy += n * dx * (s.y - my); sxx += n * (dx * dx + n * n / 12); }
+      l.slope = Math.max(-0.07, Math.min(0.07, sxx ? sxy / sxx : 0));
+      l.yAt = x => my + l.slope * (x - mx);
+    };
+    pieces.forEach(fit);
+    // 3. pieces of a broken line continue each other
+    pieces = pieces.filter(l => l.x1 - l.x0 + 1 >= minPiece).sort((a, b) => a.x0 - b.x0);
+    for (let i = 0; i < pieces.length; i++) {
+      for (let j = i + 1; j < pieces.length; j++) {
+        const a = pieces[i], b = pieces[j];
+        if (b.x0 - a.x1 > bridge) break;
+        if (Math.abs(a.yAt(b.x0) - b.yAt(b.x0)) > Math.max(2, 1.2 * ppt)) continue;
+        if (b.x1 <= a.x1 && a.x1 - a.x0 > 4 * (b.x1 - b.x0)) { pieces.splice(j, 1); j--; continue; } // a sliver of the same line
+        a.segs.push(...b.segs); fit(a);
+        pieces.splice(j, 1); j = i;
+      }
     }
-    return lines.filter(l => l.y1 - l.y0 + 1 <= maxThick).map(l => ({ x0: l.x0, x1: l.x1, y: l.y1 }));
+    // 4. a line is thin and nearly solid; a row of letters is neither
+    const out = [];
+    for (const l of pieces) {
+      const len = l.x1 - l.x0 + 1;
+      if (len < minLen) continue;
+      const edge = 6 * ppt, midY = l.yAt((l.x0 + l.x1) / 2);
+      if (midY < edge || midY > h - edge) continue; // the dark border of a copy or fax
+      const stepX = Math.max(1, Math.floor(len / 200));
+      const clear = Math.round(0.8 * ppt), reach = Math.round(5 * ppt); // where letters would stand if this were a row of text
+      let cols = 0, inked = 0, tall = 0, above = 0, below = 0; const thick = [];
+      const inkIn = (x, from, to) => {
+        for (let t = Math.max(0, from); t <= Math.min(h - 1, to); t++) if (gray[t * w + x] < dark) return true;
+        return false;
+      };
+      for (let x = l.x0; x <= l.x1; x += stepX) {
+        cols++;
+        const c = Math.round(l.yAt(x));
+        let y = -1;
+        for (const d of [0, 1, -1, 2, -2, 3, -3]) { const t = c + d; if (t >= 0 && t < h && gray[t * w + x] < dark) { y = t; break; } }
+        if (y < 0) continue;
+        inked++;
+        let top = y, bot = y;
+        while (top > 0 && gray[(top - 1) * w + x] < dark && y - top <= maxThick * 2) top--;
+        while (bot < h - 1 && gray[(bot + 1) * w + x] < dark && bot - y <= maxThick * 2) bot++;
+        const t = bot - top + 1;
+        if (t > maxThick) tall++; else thick.push(t);
+        if (inkIn(x, top - clear - reach, top - clear)) above++;
+        if (inkIn(x, bot + clear, bot + clear + reach)) below++;
+      }
+      // The tops or feet of a row of letters also line up, but the letters' bodies sit right beside that "line".
+      // A short real line is solid; only a long one may be broken up by a fax.
+      const solid = len >= 150 * ppt ? 0.7 : 0.88;
+      if (inked < cols * solid || tall > inked * 0.3 || !thick.length || above > cols * 0.3 || below > cols * 0.4) continue;
+      thick.sort((a, b) => a - b);
+      const half = thick[thick.length >> 1] / 2;
+      const yOf = x => Math.round(l.yAt(x) + half);
+      out.push({ x0: l.x0, x1: l.x1, y: yOf((l.x0 + l.x1) / 2), yL: yOf(l.x0), yR: yOf(l.x1), thick: half * 2 });
+    }
+    return out.sort((a, b) => a.y - b.y || a.x0 - b.x0);
+  };
+
+  /*
+   * Whitens the printed lines in a scan before the OCR reads it: a line under the words makes the OCR see junk
+   * ("Answer: — ee a") and misread the letters that touch it. Letters crossing the line stay.
+   */
+  AE.eraseImageLines = function (gray, w, h, lines, opts) {
+    opts = opts || {};
+    const ppt = opts.ppt || w / 612, maxThick = opts.maxThick || Math.max(4, Math.round(3 * ppt));
+    const lv = AE.inkLevels(gray), dark = Math.round(lv.ink + 0.62 * (lv.bg - lv.ink));
+    for (const l of lines) {
+      const span = Math.max(1, l.x1 - l.x0);
+      for (let x = l.x0; x <= l.x1; x++) {
+        const c = Math.round(l.yL + (l.yR - l.yL) * (x - l.x0) / span - l.thick / 2);
+        let y = -1;
+        for (const d of [0, 1, -1, 2, -2, 3, -3, 4, -4]) { const t = c + d; if (t >= 0 && t < h && gray[t * w + x] < dark) { y = t; break; } }
+        if (y < 0) continue;
+        let top = y, bot = y;
+        while (top > 0 && gray[(top - 1) * w + x] < dark && y - top <= maxThick + 1) top--;
+        while (bot < h - 1 && gray[(bot + 1) * w + x] < dark && bot - y <= maxThick + 1) bot++;
+        if (bot - top + 1 > maxThick + 1) continue; // a letter's stroke crosses here
+        for (let t = Math.max(0, top - 1); t <= Math.min(h - 1, bot + 1); t++) gray[t * w + x] = 255;
+      }
+    }
+  };
+
+  // Fax and copier dirt: tiny dark specks standing alone in white space are whitened, in the copy that is read only.
+  // A speck near bigger ink stays: it may be the dot of an "i", a full stop, or a piece of a letter on a low-resolution scan.
+  AE.despeckle = function (gray, w, h, opts) {
+    const ppt = (opts && opts.ppt) || w / 612, maxArea = Math.round(1.3 * ppt * ppt), reach = Math.round(3 * ppt);
+    const lv = AE.inkLevels(gray), dark = Math.round(lv.ink + 0.62 * (lv.bg - lv.ink));
+    const seen = new Uint8Array(w * h), stack = [], blob = [], small = [];
+    for (let s = 0; s < gray.length; s++) {
+      if (seen[s] || gray[s] >= dark) continue;
+      stack.push(s); seen[s] = 1; blob.length = 0;
+      let area = 0;
+      while (stack.length) {
+        const p = stack.pop();
+        area++; blob.push(p);
+        const x = p % w;
+        if (x > 0 && !seen[p - 1] && gray[p - 1] < dark) { seen[p - 1] = 1; stack.push(p - 1); }
+        if (x < w - 1 && !seen[p + 1] && gray[p + 1] < dark) { seen[p + 1] = 1; stack.push(p + 1); }
+        if (p >= w && !seen[p - w] && gray[p - w] < dark) { seen[p - w] = 1; stack.push(p - w); }
+        if (p < gray.length - w && !seen[p + w] && gray[p + w] < dark) { seen[p + w] = 1; stack.push(p + w); }
+      }
+      if (area <= maxArea) small.push(blob.slice());
+      else for (const p of blob) seen[p] = 2; // real ink
+    }
+    for (const b of small) {
+      const x = b[0] % w, y = Math.floor(b[0] / w);
+      let near = false;
+      for (let dy = -reach; dy <= reach && !near; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (let dx = -reach; dx <= reach; dx++) {
+          const xx = x + dx;
+          if (xx >= 0 && xx < w && seen[yy * w + xx] === 2) { near = true; break; }
+        }
+      }
+      if (!near) for (const p of b) gray[p] = 255;
+    }
+  };
+
+  // A scan's own picture stays as it is; only what the OCR reads gets stretched from grey to black and white.
+  AE.stretchContrast = function (gray) {
+    const { bg, ink } = AE.inkLevels(gray);
+    // Normal black-on-white pages are left alone: stretching them would wipe the thin strokes of the letters.
+    if (bg >= 225 && ink <= 130) return false;
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
+    let black = 0, seen = 0;
+    while (black < bg && seen < gray.length * 0.002) seen += hist[black++]; // the darkest ink really used
+    const range = Math.max(40, bg - black);
+    for (let i = 0; i < gray.length; i++) {
+      const v = (gray[i] - black) * 255 / range;
+      gray[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+    return true;
+  };
+
+  // Is this page a picture rather than text? A fax header or a scanner's own bad text layer does not make it a document.
+  AE.isScanPage = function (p) {
+    if (p.items.length < 5) return true;
+    const px = p.imagePixels || 0, chars = p.items.reduce((n, it) => n + it.str.length, 0);
+    if (px >= 400000 && chars < 250) return true; // a standard-mode fax is a small picture
+    if (px < 1500000) return false;
+    if (AE.readableShare([p]) < 0.6) return true;
+    // A "searchable" scan has good text but its lines are only pixels. That matters only on a page with answers to fill.
+    return !(p.hlines || []).length && !p.items.some(it => /__/.test(it.str)) && AE.isAffidavitPage(p);
+  };
+
+  /*
+   * What the OCR read, without its noise: junk from specks and dirt goes, and "Answcr:" / "Answer" (colon lost) becomes
+   * the "Answer:" label so the blank after it is found.
+   */
+  const closeTo = (w, target) => { // at most one letter wrong, missing or extra
+    if (w === target) return true;
+    if (Math.abs(w.length - target.length) > 1) return false;
+    let i = 0, j = 0, edits = 0;
+    while (i < w.length && j < target.length) {
+      if (w[i] === target[j]) { i++; j++; continue; }
+      if (++edits > 1) return false;
+      if (w.length > target.length) i++;
+      else if (w.length < target.length) j++;
+      else { i++; j++; }
+    }
+    return edits + (w.length - i) + (target.length - j) <= 1;
+  };
+  AE.cleanOcrItems = function (items) {
+    const kept = items.filter(it => {
+      const alnum = it.str.replace(/[^A-Za-z0-9]/g, '');
+      if (!alnum) return /[$§&]/.test(it.str);
+      if (it.conf == null) return true;
+      const low = alnum.toLowerCase();
+      if (OCR_VOCAB.has(low) || OK_SHORT_WORDS.test(low) || OCR_SHORT[low]) return true; // "Are", "Is": never junk, however unsure the OCR was
+      if (/^\d+$/.test(alnum)) return it.conf >= 20; // the "20" of "day of ____, 20__" often reads with low confidence
+      return !(it.conf < 30 || (it.conf < 55 && alnum.length <= 3));
+    });
+    for (const it of kept) {
+      const letters = it.str.replace(/[^A-Za-z]/g, '').toLowerCase();
+      if (!closeTo(letters, 'answer') || /[0-9]/.test(it.str)) continue;
+      const row = kept.filter(o => o !== it && Math.abs(o.y - it.y) < 4);
+      if (row.some(o => o.x + o.w <= it.x)) continue;           // the label comes first on its line
+      const punct = /[:;.,'|]\W*$/.test(it.str);
+      if (punct || !row.some(o => /[a-z]{3,}/i.test(o.str))) it.str = 'Answer:';
+    }
+    return kept;
+  };
+
+  // Words of the questions, for repairing what the OCR misread ("clectronic", "entrics"). Used only to decide the answer.
+  const OCR_VOCAB = new Set(('able about above abovenamed absence accept accepted accepts access accompanying account accounting accounts actions activity acts actually address adjust adjusted adjustment adjustments admission affidavit after against agreed agreement agreements allow allows already also alterations among amount amounts another answer answered answers anyone anything applicable archive archives archiving arrangement asked assigned assignment associated attach attached attachment attempts attorney authorized available aware balance basis been before behalf best between beyond bill billed billing bills books briefly business capacity care case cash caused charge charged charges chiropractor circumstance claim clear clinic clinics close closed code collected collection communications compilations complete completely complied concern concerning condition conditions conducted considers constitutes contacted contained continue contract contractor contracts contractual control conveyance conveyed copies copy copying corporate correct correspondence counseled course courses court coverage covered current curriculum custodian custody data date deposition describe described destroyed detail determine determined device diagnoses diagnosis diagnostic diagnostics direct directed direction directly discount discounted discovery doctor doctors document documents does dollar done down duces duplicate duplicates duplication during each effort either electronic else employed employee employees employer entitled entity entries establish evaluated evaluation event events ever everything exact examination examined exchange exhibits exist expected expenses explain extracted facilities facility fair familiar fees file film filming films financial foregoing forgiven form format forms forth found from full further gather group hand handed hard have health healthcare held here hereafter history hospital identified identify identity illness image images imaging immediate incident included including incurred independent indicate indicates individual information injury insurance insurer itemized judgment kept kind knowledge known lawsuit lawyer legal legally legible length less letter letters limited list listed locate location locations long lost made maintained make making manage managed many marking matters means medicaid medical medicare memorandum mentioned method microfiche missing much name named names nature near necessary notary notes notice notification number nurses oath obligated obligation observed obtain occupation occupations occurred occurrence officer official open opinion opinions organized original originals osteopath other others otherwise outlined over owed owned page pages paid paper papers part party patient patients payment payments payor payors performed period person personal persons pertaining photocopying photographed photostatic physical physician please policies policy poor portion position possess possession possible preceding preparation prepared preparing present previous previously primary prior private procedure procedures process produce produced production profit prohibits protected protection provide provided provider providers provision public purchased purchasing quality question questions rate rather rays ready reason reasonable reasonably receivable received recommended record recorded recording records redacted redactions reduced reference referral referred reflected regarding regardless regular regulations reimbursement related release released remain remains removed rendered rent replace replaced report reports representative representatives requested requests require required requires residence respect response responsibility responsible result retention role said sale same sanitarium scanned scope seek seeking send sent served service services settled settlement shortly signed sold some soon sought source sources specific specified state steps still stored studies subject subpoena subpoenaed subpoenas such suggested suit supervision supervisor systems take taken taking tangible tecum telephone terms testify testifying than that their them themselves there thereafter therein thereof these they third this those three time times title took total transaction transactions transfer transferred transmit treated treatment treatments trial true trustworthiness trustworthy truthfully under understand unless unpaid used variations various vitae waived want were what whatsoever when where whether which whom will with withheld within wording work worked would write written your yourself ' +
+    'are you the and for has had was not may can all any but who how why its our out his her one two per').split(' '));
+  const OCR_SHORT = { arc: 'are', vou: 'you', yon: 'you', yout: 'your', vout: 'your', thc: 'the', tbe: 'the', aud: 'and', iu: 'in', ot: 'of', tor: 'for', lor: 'for', bv: 'by', ol: 'of', ou: 'on',
+    dao: 'do', hase: 'have', hate: 'have', hane: 'have', amy: 'any', anv: 'any', thus: 'this' };
+  const OCR_LOOKS_ALIKE = ['ce', 'vy', 'nu', 'li', 'tf', 'oa', 'hb', 'rn', 'il', 'ao', 'sa', 'mn'];
+  const OK_SHORT_WORDS = /^(a|i|in|is|do|if|to|on|at|by|of|no|an|as|it|my|or|so|we|be|he|us|am)$/;
+  const looksAlike = (a, b) => OCR_LOOKS_ALIKE.some(p => (p[0] === a && p[1] === b) || (p[0] === b && p[1] === a));
+  const repairWord = w => {
+    if (OCR_SHORT[w]) return OCR_SHORT[w];
+    if (w.length < 3 || OCR_VOCAB.has(w) || OK_SHORT_WORDS.test(w)) return w;
+    const hits = [];
+    if (w.length >= 6) { for (const v of OCR_VOCAB) if (closeTo(w, v)) hits.push(v); }
+    else {
+      for (const v of OCR_VOCAB) {
+        if (v.length !== w.length) continue;
+        let diff = 0, alike = true;
+        for (let i = 0; i < w.length; i++) if (w[i] !== v[i]) { diff++; alike = alike && looksAlike(w[i], v[i]); }
+        if (diff === 1 && alike) hits.push(v);
+      }
+    }
+    return hits.length === 1 ? hits[0] : w;
+  };
+  AE.ocrFix = function (text) {
+    let q = text.toLowerCase().replace(/\brn(?=[a-z])/g, 'm')
+      .replace(/\border\s*no\b\.?\s*:?\s*[\d.\-]*/g, ' ')   // the footer of the page before
+      .replace(/([a-z])[.] (?=[a-z])/g, '$1, ')                // a comma read as a period
+      .replace(/\b1s\b/g, 'is').replace(/\b1n\b/g, 'in').replace(/\b1f\b/g, 'if').replace(/\b0f\b/g, 'of').replace(/\b0r\b/g, 'or')
+      .replace(/\bm (?=(your|vour|the|thc)\b)/g, 'in ')
+      .trim();
+    // junk read from the line above the question: "w in your capacity", "© are the entries", "ee a are the"
+    for (let i = 0; i < 4; i++) {
+      const m = q.match(/^\s*([^a-z\s]{1,6}|[a-z]{1,2})\s+/);
+      if (!m) break;
+      if (OK_SHORT_WORDS.test(m[1]) && m[1] !== 'a') break;
+      q = q.slice(m[0].length);
+    }
+    q = q.replace(/[a-z]+/g, repairWord).replace(/photographed ?on/g, 'photographed on').replace(/attached ?to/g, 'attached to');
+    // The first word of a line is the one most often lost: "[Are] the films kept…?"
+    if (/\?\s*$/.test(q) && /^(the|these|those|such|you|your|films?|records?|name)\b/.test(q)) q = 'are ' + q;
+    return q;
   };
 
   // Thin horizontal strokes / rectangles (underlines, signature lines) in page space: [{x, y, w}].
@@ -411,6 +670,7 @@
       const noRec = lines.find(l => /^\s*(affidavit|certificate|certification|declaration) of no (medical |billing )?records?\b/i.test(l.text));
       for (const b of found) {
         b.noRecords = !!noRec && b.y < noRec.y + 2;
+        b.ocr = !!page.ocr;
         let li = b.itemIdx != null ? lines.findIndex(l => l.items.some(it => it.i === b.itemIdx)) : -1;
         if (li < 0) {
           // A drawn underline: the text line it sits on, or (signature line) its place between two lines.
@@ -453,12 +713,26 @@
   };
 
   const overlapX = (a, b) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  // On a crooked scan a line's height changes along its length.
+  const lineYAt = (ln, x) => (ln.yL == null ? ln.y : ln.yL + (ln.yR - ln.yL) * Math.max(0, Math.min(1, (x - ln.x) / Math.max(1, ln.w))));
+  // Does this printed line lie under (or just through) this word or blank? OCR puts a word's y a little above the underline.
+  const onRow = (ln, it) => { const d = lineYAt(ln, it.x) - it.y; return d > -9 && d < 4; };
 
   // Blanks drawn as underlines (Word: underlined spaces, signature lines). An underline under printed
   // words (a title, an underlined name) is not a blank. One that runs into a "____" blank widens it.
   function addLineBlanks(page, found) {
     for (const ln of page.hlines || []) {
       if (ln.w < 8 || ln.w > page.width * 0.85) continue; // an answer underline can be 462pt; full-width rules are not blanks
+      if (page.ocr) {
+        // The line of an "Answer:" belongs to that one blank, however many pieces the scan broke it into.
+        if (ln.usedByAnswer) continue;
+        if (found.some(b => b.answerRow && onRow(ln, b))) continue;
+        // Dirt and letter strokes make short "lines". A real short blank has words beside it ("day of ____, 20__").
+        const row = page.items.filter(it => onRow(ln, it));
+        const rowText = row.map(it => it.str).join(' ');
+        const min = !row.some(it => /[a-z0-9]{2,}/i.test(it.str)) ? 90 : (NOTARY_LINE.test(rowText) ? 18 : 40);
+        if (ln.w < min) continue;
+      }
       const joined = found.find(b => Math.abs(b.y - ln.y) < 6 && overlapX(b, ln) > -2);
       if (joined) {
         let x0 = Math.min(joined.x, ln.x), x1 = Math.max(joined.x + joined.w, ln.x + ln.w);
@@ -502,7 +776,7 @@
         a.tail = (b.raw ? b.raw.slice(b.mIndex + b.mLen) : '') + (b.tail ? ' ' + b.tail : '');
         if (a.itemIdx == null && b.itemIdx != null) { a.itemIdx = b.itemIdx; a.raw = b.raw.slice(0, b.mIndex); a.mIndex = b.mIndex; a.mLen = 0; a.tail = b.raw.slice(b.mIndex + b.mLen) + (b.tail ? ' ' + b.tail : ''); }
       }
-      a.w = b.x + b.w - a.x;
+      a.w = Math.max(a.w, b.x + b.w - a.x);
       a.virtual = a.virtual && b.virtual;
       found.splice(k + 1, 1);
       k--;
@@ -515,7 +789,7 @@
    *  - sworn / notary lines → wide gaps between words ("on this ___ day of ___, 20__", "in ___ County")
    *  - a line ending in "personally appeared" / "State of" / "County of" → the rest of the line
    */
-  const NOTARY_LINE = /sworn|subscribed|day of|county of|state of|appeared|seal of office/i;
+  const NOTARY_LINE = /sworn|subscribed|day of|county of|state of|appeared|seal of office|commission|expires/i;
   const LINE_END = /(appeared|state of|county of|my name is|in and for)\s*[,:]?$/i;
   function addAnchorBlanks(page, found) {
     if (found.length && !page.ocr) return; // the page has real "____" blanks — use those only
@@ -546,10 +820,29 @@
           const labelW = it.w * m[0].length / Math.max(it.str.length, 1);
           const rest = it.str.slice(m[0].length).trim();
           const inline = rest ? { str: rest, x: it.x + labelW, y: it.y, w: it.w - labelW, h: it.h } : null;
+          if (page.ocr) {
+            // The printed line says where the blank ends, not whatever the OCR read on top of it. Anything really
+            // written there ("Answer: yes") stays inside the blank and shows as "already has".
+            const labelEnd = it.x + labelW;
+            const row = (page.hlines || []).filter(ln => ln.w <= page.width * 0.85 && onRow(ln, it) && ln.x + ln.w > labelEnd + 15 && ln.x < labelEnd + 60);
+            const later = form.slice(k + 1);
+            const stop = later.find(o => /[A-Za-z]{2,}\s*:$/.test(o.str)); // "Answer: ____  Date: ____"
+            const noLine = later.length > 4 ? later[0].x - 3 : right;       // no line found: a sentence ends the blank, a word or two does not
+            let end = row.length ? Math.max(...row.map(ln => ln.x + ln.w)) : noLine;
+            if (stop && stop.x > labelEnd + 20) end = Math.min(end, stop.x - 3);
+            row.forEach(ln => { ln.usedByAnswer = true; });
+            // "Answer:" alone with the line on the row below it: that line is this answer's, not a second blank
+            if (!row.length) (page.hlines || []).forEach(ln => { const d = lineYAt(ln, it.x) - it.y; if (d <= -9 && d > -26 && Math.abs(ln.x - it.x) < 25 && ln.w > 100) ln.usedByAnswer = true; });
+            const before = found.length;
+            blank(it, labelEnd + 3, end, m[0].length, inline);
+            if (found.length > before) found[before].answerRow = true;
+            return;
+          }
           if (!next || next.x - (it.x + it.w) > 12 || inline) blank(it, it.x + labelW + 3, inline ? Math.max(xEnd, it.x + it.w + 40) : xEnd, m[0].length, inline);
           return;
         }
         if (!notaryLine) return;
+        if (page.ocr && (page.hlines || []).some(ln => onRow(ln, it))) return;
         const gap = (next ? next.x : right) - (it.x + it.w);
         const upTo = form.slice(0, k + 1).map(o => o.str).join(' ').trim();
         if (next && gap > 14) blank(it, it.x + it.w + 2, next.x - 2, it.str.length);
@@ -582,7 +875,8 @@
 
     // Stand-alone line with a caption underneath → signature / printed name line.
     const continues = /(county of|state of|day of|appeared|name is|records (of|for)|business of|representative of|kept by|for|which)\s*[,:]?$/.test(b.prevLine.toLowerCase().replace(/[_\s]+$/, ''));
-    if (!continues && !pre.replace(/[^a-z0-9$]/g, '') && !suf.replace(/[^a-z0-9$]/g, '')) {
+    const dateDone = b.ocr && prev && prev.page === b.page && !sameLinePrev && /^notary_(month|year)/.test(prev.kind);
+    if ((!continues || dateDone) && !pre.replace(/[^a-z0-9$]/g, '') && !suf.replace(/[^a-z0-9$]/g, '')) {
       if (/notary|printer name/.test(next)) return 'notary_sig';
       if (/printed name|print name|name \(print/.test(next)) return 'custodian';
       if (/^\s*title/.test(next)) return 'title';
@@ -635,7 +929,7 @@
       b.dwq = true;
       b.dollarPrinted = /\$\s*$/.test(pre);
       b.question = q;
-      return classifyQuestion(q.toLowerCase());
+      return classifyQuestion(b.ocr ? AE.ocrFix(q) : q.toLowerCase());
     }
 
     // "(a) The total amount for all medical billed is: ____" — an amount sentence that ends in "is:"
@@ -658,6 +952,7 @@
 
     // Sworn/notary date
     if (/^\s*(st|nd|rd|th)?\s*day of/.test(suf) || (/^\s*(st|nd|rd|th)?\s*day\b/.test(suf) && /\b(this|the|on)\s*$/.test(pre))) return 'notary_day';
+    if (b.ocr && sameLinePrev && prev.kind === 'notary_month' && b.w < 60) return 'notary_year2';
     if (/d ?a ?y of\s*$/.test(lead)) return 'notary_month'; // some PDFs split the word: "da y of"
     if (sameLinePrev && /^notary_(month|day)$/.test(prev.kind) && /,?\s*20\.?\s*$/.test(pre)) return 'notary_year2';
     if (sameLinePrev && prev.kind === 'notary_month' && /,\s*$/.test(pre)) return 'notary_year4';
@@ -770,6 +1065,11 @@
     if (/name of the (private )?insurer/.test(q) && /amount|paid/.test(q)) return 'payor_names';
     // The provider's contracts, sold accounts and insurance terms — a custodian cannot know these.
     if (/managed care|contractual arrangement|terms of .*coverage|preceding (two|three|four|\d+) questions|purchased or assigned|purchasing third party|contracts? or agreements?|contract\(s\)|contract with medicare/.test(q)) return 'no_knowledge';
+    // "Do you have any reason to believe the records have been edited, purged, culled…?" / "…has anyone suggested any part be withheld?"
+    if (/reason to believe/.test(q) && /edited|purged|culled|altered|changed|made different/.test(q)) return 'no';
+    if (/(requested|directed|suggested)\b/.test(q) && /withheld|protected from discovery/.test(q)) return 'no';
+    // "If your answer to the preceding question is yes, please hand a copy of such records to the notary…"
+    if (/^if your answer\b.*\byes\b/.test(q) && /\b(hand|attach|produce|furnish|deliver)\b/.test(q) && /\b(cop(y|ies)|records?|films?)\b/.test(q)) return 'yes';
     // "Please hand / release / produce the records to the Officer (Notary)…" / "Have you handed the records to the Officer?"
     if (/\bhave you (now )?handed\b/.test(q) && /officer|notary/.test(q)) return 'yes';
     if (/^please (hand|release|produce|furnish|deliver)\b/.test(q) && /officer|notary|photocopy|exhibit|attach/.test(q)) return 'yes';
@@ -789,7 +1089,7 @@
       if (/been paid by (any )?(private )?insur|paid by .*other than/.test(q)) return 'yn_others_paid';
       if (/^(has|have) (your|the|this) (facility|office|provider|practice|clinic|hospital) been paid|^have you been paid/.test(q)) return 'yn_paid';
       // "Has X made or caused to be made any billing records… any payments made by the patient?"
-      if (/made or caused to be made/.test(q) && /\bpayments?\b/.test(q)) return 'yes_payments';
+      if (/made or caused\b/.test(q) && /\bpayments?\b/.test(q)) return 'yes_payments';
       // Business-records foundation questions — always "Yes" for a custodian.
       if (/custodian|provider under (medicare|medicaid)|regular(ly)? (course|practice|conducted)|course of regularly|at,? (or )?(near|about) the time|shortly after|reasonably soon|maintained as required|as required by (the )?regulations|photographed on|attached to each (film|cd|dvd|image|x-?ray)|aid in (the )?(treatment|diagnosis)|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|(received?|accept(ed)?) (a |the )?subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
       return 'answer';
