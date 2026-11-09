@@ -47,6 +47,7 @@
     archive: 'Answer: archive (no records found?)',
     all_provided: 'Answer: provided all records',
     no_knowledge: 'Answer: no information (custodian of records)',
+    knowledge_basis: 'Answer: basis of knowledge (custodian of records)',
     payor_names: 'Answer: names of who paid (no information if nobody did)',
     yes_payments: 'Answer: Yes (+ no payment has been made)',
     yes_pages: 'Answer: Yes + number of pages',
@@ -1050,7 +1051,7 @@
       (/\b(have|did|do|are|were|will) you\b[^?]*\?\s*$/.test(q) && !/^(what|how)\b/.test(q)) ||
       /^(please )?state whether/.test(q) || handedOver;
     // "Please release the records… Identify how many pages you have released. Have you done as requested?"
-    if (/how many pages|number of pages|total (number of )?pages/.test(q)) return handedOver ? 'yes_pages' : 'pages';
+    if (/how many pages|number of pages|total (number of )?pages|amount of pages/.test(q)) return handedOver ? 'yes_pages' : 'pages';
     if (/\bname\b.*\b(title|position|occupation)\b/.test(q)) return /address|residence|telephone/.test(q) ? 'custodian_title_addr' : 'custodian_title';
     // Opinions a records custodian cannot give (reasonable / necessary)
     if (/reasonable|necessary/.test(q) && /charge|service|treatment|care/.test(q)) return 'no_info';
@@ -1058,6 +1059,13 @@
     if (/in the event (that )?no records|if no records (can be|are|were) (found|located)/.test(q)) return 'archive';
     // "Have you now provided all the records…?" / "…produced records… other than those made the basis of this suit?"
     if (/have you now provided all|other than (for )?those (records )?made the basis/.test(q)) return 'all_provided';
+    // "Have you produced any and all communications with counsel / letters of protection…?" — a custodian produces what is in the file
+    if (/have you produced (any and )?all\b/.test(q) && /communications?|letters? of protection|financial interest/.test(q)) return 'all_provided';
+    // "…what is the basis of your personal knowledge regarding the billing…?"
+    if (/basis of your (personal )?knowledge/.test(q)) return 'knowledge_basis';
+    // What only the provider's office or the patient knows: insurance details, Letters of Protection, contracts and
+    // negotiated rates, Medicare cost reports and rates, the patient's own doctors and pharmacies.
+    if (/insurance (company )?information|insurance compan(y|ies) (were|was) identified|letter of protection|financial interest in (this|the) (lawsuit|suit|case)|negotiated (or reduced )?rates|reduced rates|contracts? regarding|cost reports?|reimbursement rates?|primary care (physician|doctor)|pharmac(y|ies)/.test(q)) return 'no_knowledge';
     // Other providers that may hold records — a custodian cannot know
     if (/^are you aware of any other (hospital|clinic|physician|doctor|provider|facility)/.test(q)) return 'no_knowledge';
     if (/how long.*(maintain|kept|retain)|retention|before destruction/.test(q)) return 'retention';
@@ -1143,6 +1151,7 @@
       // the custodian's standard wording (from a filled LORR DWQ)
       case 'archive': return 'Archive';
       case 'all_provided': return `I have provided all ${d.type === 'billing' ? 'billing' : 'medical'} records under my care and possession.`;
+      case 'knowledge_basis': return `I am the custodian of records. I maintain and produce the ${d.type === 'billing' ? 'billing' : 'medical'} records kept in the regular course of business.`;
       case 'no_knowledge': return `I do not have that information, I am the custodian of records, I maintain and produce ${d.type === 'billing' ? 'billing' : 'medical'} records.`;
       // Nobody else paid: the standard answer. Someone did: stays empty (red) so the names and amounts get typed in.
       case 'payor_names': return (+d.insPaid || 0) + (+d.medPaid || 0) > 0 ? '' : AE.valueFor('no_knowledge', d);

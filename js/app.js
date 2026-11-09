@@ -674,7 +674,7 @@
   }
   // Subpoena answers that are the same on every case (not amounts, dates, pages or names) — the user's own
   // wording for them is remembered per question.
-  const REMEMBER_KINDS = new Set(['answer', 'yes', 'no', 'na', 'no_info', 'retention', 'archive', 'all_provided', 'no_knowledge']);
+  const REMEMBER_KINDS = new Set(['answer', 'yes', 'no', 'na', 'no_info', 'retention', 'archive', 'all_provided', 'no_knowledge', 'knowledge_basis']);
   const rememberable = b => !!(b.dwq && b.question && REMEMBER_KINDS.has(b.kind));
   // Called after the user typed in a blank. Typing the standard answer again forgets the remembered one.
   function rememberEdit(b) {
