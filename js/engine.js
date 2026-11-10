@@ -1069,6 +1069,8 @@
       /^(please )?state whether/.test(q) || handedOver;
     // "Please release the records… Identify how many pages you have released. Have you done as requested?"
     if (/how many pages|number of pages|total (number of )?pages|amount of pages/.test(q)) return handedOver ? 'yes_pages' : 'pages';
+    // "If not, why not?" asked on its own after "Have you complied?" — the records were handed over
+    if (/^if (not|no),? (why( not)?|please explain|explain( why)?)\s*[?.]?\s*$/.test(q.trim())) return 'na';
     if (/\bname\b.*\b(title|position|occupation)\b/.test(q)) return /address|residence|telephone/.test(q) ? 'custodian_title_addr' : 'custodian_title';
     // Opinions a records custodian cannot give (reasonable / necessary)
     // also "…qualifications… to reach conclusions regarding medical necessity of treatment…"
