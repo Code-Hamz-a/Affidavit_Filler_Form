@@ -162,7 +162,11 @@
 
 
   // Fields marked data-auto are filled by the tool until the user types in them.
-  $$('[data-auto]').forEach(el => el.addEventListener('input', () => { S.manual[el.id] = true; el.classList.remove('auto'); refresh(); }));
+  $$('[data-auto]').forEach(el => el.addEventListener('input', () => {
+    S.manual[el.id] = true; el.classList.remove('auto');
+    if (el.id === 'f-facility') $('#fac-src').textContent = '';
+    refresh();
+  }));
   function setAuto(id, v) {
     const el = $('#' + id);
     if (S.manual[id]) return;
@@ -239,6 +243,8 @@
       if (!inAffidavit && inAuth) fromAuth.push('facility');
       const m = inAffidavit || inAuth || AE.matchFacility(AE.fullText(r.pages.slice(0, 1)), settings.profiles) || AE.matchFacility(AE.fullText(r.pages), settings.profiles);
       setAuto('f-facility', m ? (m.profile.affName || AE.affidavitName(m.profile.name)) : (info.facility || ''));
+      // Say where the facility was read, so a wrong one can be traced (and corrected) at a glance.
+      $('#fac-src').textContent = !val('f-facility') ? '' : `(from ${inAffidavit ? 'request' : inAuth ? 'authorization' : 'request'}${m && m.alias ? `: “${m.alias}”` : ''})`;
       setAuto('f-from', info.reqFrom || '');
       setAuto('f-to', info.reqTo || 'Present');
       $('#from-src').textContent = info.reqFrom ? '(from request)' : '';
@@ -725,9 +731,12 @@
         setAuto('f-patient', invPatient); analyzeAttachments(true);
       }
       if (!val('f-facility') && !S.manual['f-facility']) {
-        const m = S.atts.map(a => a.pages && a.pages.length ? AE.matchFacility(AE.fullText(a.pages), settings.profiles) : null)
+        const m = S.atts.map(a => { const r = a.pages && a.pages.length ? AE.matchFacility(AE.fullText(a.pages), settings.profiles) : null; return r && { ...r, file: a.name }; })
           .filter(Boolean).sort((x, y) => y.score - x.score)[0];
-        if (m) setAuto('f-facility', m.profile.affName || AE.affidavitName(m.profile.name));
+        if (m) {
+          setAuto('f-facility', m.profile.affName || AE.affidavitName(m.profile.name));
+          $('#fac-src').textContent = `(from attached file ${m.file}: “${m.alias}”)`;
+        }
       }
     }
     setAuto('f-filename', AE.fileName(val('f-patient'), type()));
@@ -1298,7 +1307,7 @@
     ['f-writeoff', 'f-paid', 'f-ins-paid', 'f-med-paid', 'f-pt-paid', 'f-adjust'].forEach(id => { $('#' + id).value = '0.00'; });
     $('#f-lien').value = '';
     $('#req-info').innerHTML = ''; $('#req-range').textContent = ''; $('#type-detected').textContent = '';
-    $('#from-src').textContent = ''; $('#to-src').textContent = ''; $('#dob-src').textContent = ''; delete $('#f-dob').dataset.src;
+    $('#from-src').textContent = ''; $('#to-src').textContent = ''; $('#dob-src').textContent = ''; $('#fac-src').textContent = ''; delete $('#f-dob').dataset.src;
     $('#f-standard').checked = false; $('#btn-open').disabled = true; $('#out-info').textContent = '';
     $$('input[name=type]').forEach(r => { r.checked = r.value === 'records'; });
     renderAttachments(); renderBlanksTable(); renderPreview(); refresh();

@@ -1009,13 +1009,30 @@
     return [...new Set([...parts].map(AE.normName))].filter(a => a.length >= 8 && a.includes(' '));
   };
   // Best facility profile named in `text` (longest alias wins; more mentions breaks ties).
+  // OCR often loses the "&" of a name or reads it as "8" ("RIVER OAKS HOSPITAL 8 CLINICS"), so names are compared without "and".
+  const noAnd = s => (' ' + s + ' ').replace(/ (and|8) /g, ' ').replace(/ (and|8) /g, ' ').replace(/\s+/g, ' ');
   AE.matchFacility = function (text, profiles) {
-    const t = ' ' + AE.normName(text) + ' ';
+    const t = noAnd(AE.normName(text));
+    // Text whose spaces were lost ("RIVEROAKS HOSPITAL") still matches, but only as whole words:
+    // "BROAD HOSPITAL EASTEX" must not contain "AD Hospital East".
+    let tc = '';
+    const startsWord = [], endsWord = [];
+    for (let i = 0; i < t.length; i++) {
+      if (t[i] === ' ') continue;
+      startsWord.push(t[i - 1] === ' ');
+      endsWord.push(t[i + 1] === ' ');
+      tc += t[i];
+    }
+    const wholeWordsNoSpace = s => {
+      let n = 0;
+      for (let k = tc.indexOf(s); k >= 0; k = tc.indexOf(s, k + 1)) if (startsWord[k] && endsWord[k + s.length - 1]) n++;
+      return n;
+    };
     let best = null;
     for (const p of profiles || []) {
-      const tc = t.replace(/ /g, '');
       for (const a of AE.facilityAliases(p.name).concat(p.affName ? AE.facilityAliases(p.affName) : [])) {
-        const count = (t.split(' ' + a + ' ').length - 1) || (tc.split(a.replace(/ /g, '')).length - 1);
+        const b = noAnd(a).trim();
+        const count = (t.split(' ' + b + ' ').length - 1) || wholeWordsNoSpace(b.replace(/ /g, ''));
         if (!count) continue;
         const score = a.length * 10 + count;
         if (!best || score > best.score) best = { profile: p, score, alias: a };
