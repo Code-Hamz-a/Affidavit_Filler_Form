@@ -1071,7 +1071,8 @@
     if (/how many pages|number of pages|total (number of )?pages|amount of pages/.test(q)) return handedOver ? 'yes_pages' : 'pages';
     if (/\bname\b.*\b(title|position|occupation)\b/.test(q)) return /address|residence|telephone/.test(q) ? 'custodian_title_addr' : 'custodian_title';
     // Opinions a records custodian cannot give (reasonable / necessary)
-    if (/reasonable|necessary/.test(q) && /charge|service|treatment|care/.test(q)) return 'no_info';
+    // also "…qualifications… to reach conclusions regarding medical necessity of treatment…"
+    if (/\breasonable(ness)?\b|necessary|necessity/.test(q) && /charge|service|treatment|care/.test(q)) return 'no_info';
     // "In the event that no records can be found, are there archives or retention policies…?" — records were found
     if (/in the event (that )?no records|if no records (can be|are|were) (found|located)/.test(q)) return 'archive';
     // "Have you now provided all the records…?" / "…produced records… other than those made the basis of this suit?"
@@ -1082,7 +1083,7 @@
     if (/basis of your (personal )?knowledge/.test(q)) return 'knowledge_basis';
     // What only the provider's office or the patient knows: insurance details, Letters of Protection, contracts and
     // negotiated rates, Medicare cost reports and rates, the patient's own doctors and pharmacies.
-    if (/insurance (company )?information|insurance compan(y|ies) (were|was) identified|letter of protection|financial interest in (this|the) (lawsuit|suit|case)|negotiated (or reduced )?rates|reduced rates|contracts? regarding|cost reports?|reimbursement rates?|primary care (physician|doctor)|pharmac(y|ies)/.test(q)) return 'no_knowledge';
+    if (/insurance (company )?information|insurance compan(y|ies) (were|was) identified|letter(s|\(s\))? of protection|financial interest in (this|the) (lawsuit|suit|case)|negotiated (or reduced )?rates|reduced rates|contracts? regarding|cost reports?|reimbursement rates?|primary care (physician|doctor)|pharmac(y|ies)/.test(q)) return 'no_knowledge';
     // Other providers that may hold records — a custodian cannot know
     if (/^are you aware of any other (hospital|clinic|physician|doctor|provider|facility)/.test(q)) return 'no_knowledge';
     if (/how long.*(maintain|kept|retain)|retention|before destruction/.test(q)) return 'retention';
