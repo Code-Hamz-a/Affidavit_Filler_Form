@@ -53,6 +53,8 @@
     yes_pages: 'Answer: Yes + number of pages',
     yn_paid: 'Answer: been paid? (Yes / No)',
     yn_others_paid: 'Answer: paid by insurance or others? (Yes / No)',
+    yn_pt_paid: 'Answer: patient paid any portion? (Yes / No)',
+    yn_writeoff: 'Answer: any portion adjusted / written off? (Yes / No)',
     answer: 'Answer (remembered)',
     no_info: 'Answer: no information (custodian)',
     retention: 'Answer: records retention',
@@ -1092,6 +1094,10 @@
     if (/how long.*(maintain|kept|retain)|retention|before destruction/.test(q)) return 'retention';
     // "…please write the name of the private insurer… and the total amount paid by each" — only asked when someone else paid
     if (/name of the (private )?insurer/.test(q) && /amount|paid/.test(q)) return 'payor_names';
+    // "Please list the entities (person, insurance company, Medicaid or Medicare) that have paid…" → who paid
+    if (/^(please )?(list|identify|name|state) (all |the |any )?(entities|payors|payers)\b/.test(q) && /\bpaid\b/.test(q)) return 'payor_names';
+    // "Please list the dollar amount that each entity identified in Question No. 11 has paid" → what they paid
+    if (/\beach (entity|payor|payer)\b/.test(q) && /\bpaid\b/.test(q) && /amount/.test(q)) return 'amt_payor_paid';
     // The provider's contracts, sold accounts and insurance terms — a custodian cannot know these.
     if (/managed care|contractual arrangement|terms of .*coverage|preceding (two|three|four|\d+) questions|purchased or assigned|purchasing third party|contracts? or agreements?|contract\(s\)|contract with medicare/.test(q)) return 'no_knowledge';
     // "Do you have any reason to believe the records have been edited, purged, culled…?" / "…has anyone suggested any part be withheld?"
@@ -1117,6 +1123,10 @@
       // "Has your facility been paid…?" / "…been paid by private insurance, or by any person other than the patient?"
       if (/been paid by (any )?(private )?insur|paid by .*other than/.test(q)) return 'yn_others_paid';
       if (/^(has|have) (your|the|this) (facility|office|provider|practice|clinic|hospital) been paid|^have you been paid/.test(q)) return 'yn_paid';
+      // "Please state whether <patient> has paid any portion of the expenses… not covered by a third-party entity"
+      if (/\bha(s|ve) paid any (portion|part)\b/.test(q)) return 'yn_pt_paid';
+      // "Please state whether any portion of the expenses… have been adjusted, written off and/or charged off"
+      if (/\bany (portion|part)\b/.test(q) && /written off|write[- ]?off|charged off|adjusted|discounted/.test(q)) return 'yn_writeoff';
       // "Has X made or caused to be made any billing records… any payments made by the patient?"
       if (/made or caused\b/.test(q) && /\bpayments?\b/.test(q)) return 'yes_payments';
       // Business-records foundation questions — always "Yes" for a custodian.
@@ -1181,6 +1191,8 @@
       case 'yes_pages': return d.pages != null && d.pages !== '' ? `Yes, ${d.pages} pages` : 'Yes';
       case 'yn_paid': return (+d.paid || 0) > 0 ? 'Yes' : 'No';
       case 'yn_others_paid': return (+d.insPaid || 0) + (+d.medPaid || 0) > 0 ? 'Yes' : 'No';
+      case 'yn_pt_paid': return (+d.ptPaid || 0) > 0 ? 'Yes' : 'No';
+      case 'yn_writeoff': return (+d.writeoff || 0) + (+d.adjust || 0) > 0 ? 'Yes' : 'No';
       case 'custodian': return d.custodian || '';
       case 'title': return d.title || '';
       case 'facility': return d.facility || '';
