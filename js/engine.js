@@ -1061,7 +1061,9 @@
   // Returns a field kind; 'answer' = case-specific question whose answer the app remembers from last time.
   AE.classifyQuestion = classifyQuestion;
   function classifyQuestion(q) {
-    q = q.replace(/^\s*(question|q)?\s*(no\.?|#)?\s*\d*\s*[.):-]?\s*/, '')
+    // a page header / footer read into the question on scans: "Order 84944.004 Were these records…"
+    q = q.replace(/^\s*order\s*(no\.?|#|number)?\s*[:.]?\s*\d[\d.-]*\s+/, '')
+      .replace(/^\s*(question|q)?\s*(no\.?|#)?\s*\d*\s*[.):-]?\s*/, '')
       .replace(/^if you (have )?answered yes to question (number )?\d+,?\s*/, '')
       // "Of the total amount charged for treatment to X, how much was written off…" → ask only the last part
       .replace(/^of the total amount (charged|billed)[^,]*,\s*/, '');
@@ -1112,8 +1114,13 @@
     if (/^please attach\b/.test(q) && /\brecords?\b/.test(q)) return 'yes';
     if (/^(please )?(describe|identify|list) .*not (been )?(provided|produced|handed)/.test(q)) return 'na';
     // "If you have answered the previous question yes, please state the alterations or redactions…" — nothing was removed
-    if (/^(if (so|yes)|if you (have )?answered|(please )?(state|describe|list|identify|explain))\b/.test(q) &&
+    // ("If you have ans… the previous question yes" — OCR may garble "answered")
+    if (/^(if (so|yes)|if you (have )?(answered|\S+ (the )?(previous|preceding|above) question)|(please )?(state|describe|list|identify|explain))\b/.test(q) &&
       /alteration|redact|removed|withheld|extracted|destroyed|missing/.test(q)) return 'na';
+    // "Please examine the copies… and state whether or not they are true and correct copies of the originals."
+    if (/\bstate whether\b/.test(q) && /true and correct|true copies|exact duplicates?/.test(q)) return 'yes';
+    // "Are you currently making attempts to collect the outstanding balance…?" — not sought (as "continue to seek" → $0.00)
+    if (/attempts? to collect|trying to collect|currently collecting/.test(q)) return 'no';
     if (yesNo) {
       // Nothing was taken out and nothing was held back.
       // Nothing destroyed or missing, no other place or provider holding this patient's records.
