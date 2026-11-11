@@ -925,7 +925,8 @@
       const parts = ctx.split(MARK);
       let q = (parts.length > 1 ? parts[parts.length - 2] : ctx).replace(/\s+/g, ' ').trim();
       // Keep only the last numbered item: "22. Please fill in… (A) Total amount for all medical bill:" → "Total amount…"
-      const items = q.split(/(?:^|\s)(?:\d{1,2}\.|\(?[A-Fa-f][.)])\s+/).filter(s => s.trim());
+      // ("8) Were these records…" numbers too — so a footer like "YZ01 - 66623-59-59" from the page before is dropped)
+      const items = q.split(/(?:^|\s)(?:\d{1,2}[.)]|\(?[A-Fa-f][.)])\s+/).filter(s => s.trim());
       if (items.length) q = items[items.length - 1].trim();
       b.dwq = true;
       b.dollarPrinted = /\$\s*$/.test(pre);
@@ -1119,7 +1120,7 @@
       // "Has X made or caused to be made any billing records… any payments made by the patient?"
       if (/made or caused\b/.test(q) && /\bpayments?\b/.test(q)) return 'yes_payments';
       // Business-records foundation questions — always "Yes" for a custodian.
-      if (/custodian|provider under (medicare|medicaid)|regular(ly)? (course|practice|conducted)|course of regularly|at,? (or )?(near|about) the time|shortly after|reasonably soon|maintained as required|as required by (the )?regulations|photographed on|attached to each (film|cd|dvd|image|x-?ray)|aid in (the )?(treatment|diagnosis)|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|(received?|accept(ed)?) (a |the )?subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
+      if (/custodian|provider under (medicare|medicaid)|regular(ly)? (course|practice|conducted)|course of regularly|at,? (or )?(near|about) the time|shortly after|reasonably soon|closely related to (or simultaneous with )?the (occurrence|event|act)|simultaneous with the (occurrence|event|act)|maintained as required|as required by (the )?regulations|photographed on|attached to each (film|cd|dvd|image|x-?ray)|aid in (the )?(treatment|diagnosis)|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|(received?|accept(ed)?) (a |the )?subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
       return 'answer';
     }
     // "Please state your full name and the name and address of your employer."
