@@ -62,8 +62,8 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
      - If the affidavit page itself was not recognised, it is locked. Tick **All pages**, then press **Edit this page** above it. You'll be asked to confirm, because HIPAA authorizations, letters and other forms must never be edited. **Lock page** undoes it.
    - **Removing pages:** tick **All pages** above the preview and press **Remove page** on any page of the request (press **Undo** to bring it back). For records and invoices, press **Pages** next to the file and click the pages to leave out. To read a page first, press **View** on it: the page opens large, **◀ ▶** (or the arrow keys) go to the other pages, **Remove this page** / **Keep this page** decides, and **← All pages** (or Esc) goes back. The page count, invoice totals and DOS update automatically.
 6. **Create & download PDF**. The file name is filled in automatically:
-   - Records: `Patient Name_affidavit.pdf`
-   - Billing: `Patient Name_bill_affidavit.pdf`
+   - `RequestID_Patient Name.pdf` (records and billing), for example `25144285_John Doe.pdf`.
+   - **Request ID** (step 5) is read from the request: a "Request ID / Request # / Request No." printed in it, otherwise the number in the request file name (`Req_25144285_….pdf`, `… REQ 85152.pdf`, `23642745 ….pdf`). It is red when no ID was found; type it in and the file name updates. Without an ID the file is `Patient Name.pdf`.
    - Court-case words around the name (Plaintiff, Defendant, Petitioner, Claimant, "et al", "v. …") are left out of the patient name and the file name.
    - **New request** under the button (or at the top right) clears everything and goes back to the top for the next request.
 

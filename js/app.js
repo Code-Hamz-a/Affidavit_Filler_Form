@@ -234,6 +234,7 @@
         S.req.authNotes.push(`Date of birth differs: request says ${info.dob}, authorization says ${auth.dob}.`);
       const fromAuth = [!info.patient && auth.patient && 'patient', !info.dob && auth.dob && 'DOB'].filter(Boolean);
       setAuto('f-patient', info.patient || auth.patient || '');
+      setAuto('f-reqid', AE.requestId(file.name, r.pages));
       setAuto('f-dob', info.dob || auth.dob || '');
 
       // Facility: the name written in the affidavit, then the one the authorization releases from, then the letter.
@@ -739,7 +740,7 @@
         }
       }
     }
-    setAuto('f-filename', AE.fileName(val('f-patient'), type()));
+    setAuto('f-filename', AE.fileName(val('f-patient'), type(), null, val('f-reqid')));
     const prof = activeProfile(), cd = caseData();
     $('#fac-profile').textContent = !val('f-facility') ? 'Pick the facility from the list (type to search).'
       : prof ? `Facility profile: ${prof.name} · custodian ${cd.custodian || '—'} · ${cd.county} County`
@@ -1175,6 +1176,8 @@
       $('#' + id).classList.toggle('missing', miss);
       if (miss) errs.push({ text: `Enter the ${label}.`, focus: id });
     }
+    // Request ID goes in front of the file name — red until it is known (not required to create the PDF).
+    $('#f-reqid').classList.toggle('missing', !mergeOnly && !val('f-reqid'));
     if (val('f-dob') && !AE.parseDate(val('f-dob'))) errs.push({ text: 'Date of birth is not a valid date (MM/DD/YYYY).', focus: 'f-dob' });
     if (val('f-from') && !AE.parseDate(val('f-from'))) errs.push({ text: 'DOS from is not a valid date (MM/DD/YYYY).', focus: 'f-from' });
     if (!d.custodian && !mergeOnly) errs.push({ text: 'Enter the custodian name in Settings.', focus: 's-custodian' });
@@ -1276,7 +1279,7 @@
       const filledPages = new Set([...fills.filter(f => (f.value || '').trim()).map(f => f.page), ...ink.map(k => k.page)]);
       const whiteouts = S.req ? S.req.pages.filter(p => filledPages.has(p.num)).flatMap(p => (p.whiteouts || []).map(w => ({ ...w, page: p.num }))) : [];
       const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, ink, attachments, standard, whiteouts });
-      let name = val('f-filename') || AE.fileName(d.patient, type());
+      let name = val('f-filename') || AE.fileName(d.patient, type(), null, val('f-reqid'));
       if (!/\.pdf$/i.test(name)) name += '.pdf';
       name = name.replace(/[\\/:*?"<>|]+/g, '');
       const blob = new Blob([bytes], { type: 'application/pdf' });
@@ -1303,7 +1306,7 @@
     if (S.req && S.req.doc) S.req.doc.destroy();
     if (S.lastUrl) URL.revokeObjectURL(S.lastUrl);
     resetState();
-    ['f-patient', 'f-dob', 'f-facility', 'f-from', 'f-to', 'f-pages', 'f-total', 'f-balance', 'f-filename'].forEach(id => { $('#' + id).value = ''; $('#' + id).classList.remove('auto', 'missing'); });
+    ['f-patient', 'f-dob', 'f-facility', 'f-from', 'f-to', 'f-pages', 'f-total', 'f-balance', 'f-reqid', 'f-filename'].forEach(id => { $('#' + id).value = ''; $('#' + id).classList.remove('auto', 'missing'); });
     ['f-writeoff', 'f-paid', 'f-ins-paid', 'f-med-paid', 'f-pt-paid', 'f-adjust'].forEach(id => { $('#' + id).value = '0.00'; });
     $('#f-lien').value = '';
     $('#req-info').innerHTML = ''; $('#req-range').textContent = ''; $('#type-detected').textContent = '';

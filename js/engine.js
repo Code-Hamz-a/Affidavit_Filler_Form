@@ -1798,10 +1798,23 @@
     return page;
   }
 
-  AE.fileName = function (patient, type, pattern) {
-    const name = (AE.stripParty(patient) || 'Patient').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim();
-    const p = pattern || (type === 'billing' ? '{name}_bill_affidavit' : '{name}_affidavit');
-    return p.replace('{name}', name) + '.pdf';
+  // Output file name: "RequestID_Patient Name.pdf" (just "Patient Name.pdf" until a request ID is known).
+  AE.fileName = function (patient, type, pattern, reqId) {
+    const clean = s => String(s || '').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim();
+    const name = clean(AE.stripParty(patient)) || 'Patient', id = clean(reqId);
+    const p = pattern || (id ? '{id}_{name}' : '{name}');
+    return p.replace('{id}', id).replace('{name}', name) + '.pdf';
+  };
+
+  // Request ID: a "Request ID / Request # / Request No." printed in the request, else the number in its file name
+  // ("Req_25144285_….pdf", "… REQ 85152.2.pdf", "23642745 adhc ….pdf").
+  AE.requestId = function (fileName, pages) {
+    const text = pages && pages.length ? AE.fullText(pages.slice(0, 3)) : '';
+    const t = text.match(/\brequest\s*(?:id|#|no\.?|number)\s*[:#.]?\s*#?\s*(\d[\d-]{3,})/i);
+    if (t) return t[1].replace(/-+$/, '');
+    const f = String(fileName || '').replace(/\.[a-z0-9]+$/i, '');
+    const m = f.match(/\breq(?:uest)?(?:[\s_#-]*(?:id|no\.?))?[\s_#.-]*(\d{4,})/i) || f.match(/^\s*(\d{5,})/) || f.match(/(?:^|[^\d.])(\d{6,})(?![\d])/);
+    return m ? m[1] : '';
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AE;
