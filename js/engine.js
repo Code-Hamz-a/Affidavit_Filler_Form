@@ -62,6 +62,8 @@
     custodian_title_addr: 'Name + address + title',
     amt_balance_whom: '$ Outstanding balance + who owes it',
     employer_address: 'Employer + business address',
+    employer_address_phone: 'Employer + business address + phone',
+    custodian_title_addr_phone: 'Name + address + phone + title',
     custodian_employer: 'Name + employer + business address',
     amt_ins_paid: '$ Paid by insurance',
     amt_payor_paid: '$ Paid by insurance / Medicaid / Medicare',
@@ -1076,7 +1078,7 @@
     if (/how many pages|number of pages|total (number of )?pages|amount of pages/.test(q)) return handedOver ? 'yes_pages' : 'pages';
     // "If not, why not?" asked on its own after "Have you complied?" — the records were handed over
     if (/^if (not|no),? (why( not)?|please explain|explain( why)?)\s*[?.]?\s*$/.test(q.trim())) return 'na';
-    if (/\bname\b.*\b(title|position|occupation)\b/.test(q)) return /address|residence|telephone/.test(q) ? 'custodian_title_addr' : 'custodian_title';
+    if (/\bname\b.*\b(title|position|occupation)\b/.test(q)) return /address|residence|telephone/.test(q) ? (/tele?phone|phone (number|no)/.test(q) ? 'custodian_title_addr_phone' : 'custodian_title_addr') : 'custodian_title';
     // Opinions a records custodian cannot give (reasonable / necessary)
     // also "…qualifications… to reach conclusions regarding medical necessity of treatment…"
     if (/\breasonable(ness)?\b|necessary|necessity/.test(q) && /charge|service|treatment|care/.test(q)) return 'no_info';
@@ -1144,7 +1146,7 @@
     if (/your (full |complete )?name\b.*\bemployer/.test(q)) return 'custodian_employer';
     if (/(state|give|what is) your (full |complete )?name|^(please )?state (the )?(full )?name/.test(q)) return 'custodian';
     if (/by whom (are )?you (are )?employed|who (is your employer|employs you|do you work for)|name of (your )?employer|employer'?s name/.test(q))
-      return /address/.test(q) ? 'employer_address' : 'facility';
+      return /address/.test(q) ? (/tele?phone|phone (number|no)/.test(q) ? 'employer_address_phone' : 'employer_address') : 'facility';
     if (/\b(title|position|capacity)\b/.test(q) && /^(what|state|please)/.test(q)) return 'title';
     // things only the provider's billing system can tell: rates, fee schedules, payor names, "accepted in full"
     if (/\brates?\b|fee schedule|names? of|name\(s\)|payment in full|accepted as payment/.test(q)) return 'answer';
@@ -1239,6 +1241,8 @@
       // "Total amount still owed and by whom" → "$147,717.77, Jane Doe"
       case 'amt_balance_whom': return d.balance == null ? '' : (+d.balance || 0) > 0 && d.patient ? `${money(d.balance)}, ${d.patient}` : money(d.balance);
       case 'employer_address': return [d.facility, d.address].filter(Boolean).join(', ');
+      case 'employer_address_phone': return [d.facility, d.address, d.phone].filter(Boolean).join(', ');
+      case 'custodian_title_addr_phone': return [d.custodian, d.address, d.phone, d.title].filter(Boolean).join(', ');
       case 'custodian_employer': return [d.custodian, d.facility, d.address].filter(Boolean).join(', ');
       case 'no_info': return d.noInfo || '';
       case 'retention': return d.retention || '';

@@ -22,7 +22,7 @@
     'M. Radwan Al-Sabbagh, MD., PA c/o Care Capital', 'RMC Pharmacy', "Zippo's Healthcare Services c/o Care Capital",
     'Center For Scoliosis & Advanced Spine Surgery PLLC c/o Care Capital', 'AD Pharmacy', 'Charles Garcia, MD c/o CareCapital'
   ];
-  const newProfile = name => ({ name, affName: AE.affidavitName(name), custodian: '', county: '' });
+  const newProfile = name => ({ name, affName: AE.affidavitName(name), address: '', phone: '', custodian: '', county: '' });
   let settings = {
     custodian: '', title: 'Custodian of Records', county: 'Harris', state: 'Texas', profiles: null,
     // Standard subpoena answers (from the user's own filled Lexitas DWQ)
@@ -42,6 +42,19 @@
   if (!settings.stateLong) { settings.state = AE.stateLong(settings.state) || 'Texas'; settings.stateLong = true; }
   const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* storage blocked */ } };
   if (migrateCo) saveSettings();
+  // Company facility list (js/facility-directory.js): add the missing facilities and fill empty addresses / phones — once per
+  // directory version, so facilities the user removed or edited later stay that way.
+  const DIR_VERSION = 1;
+  if (Array.isArray(window.FACILITY_DIRECTORY) && settings.dirVersion !== DIR_VERSION) {
+    for (const [name, address, phone] of window.FACILITY_DIRECTORY) {
+      const n = AE.normName(name);
+      let p = settings.profiles.find(x => x && AE.normName(x.name) === n);
+      if (!p) { p = newProfile(name); settings.profiles.push(p); }
+      if (!p.address) p.address = address;
+      if (!p.phone) p.phone = phone;
+    }
+    settings.dirVersion = DIR_VERSION; saveSettings();
+  }
 
   const SETTING_FIELDS = {
     's-custodian': 'custodian', 's-title': 'title', 's-county': 'county', 's-state': 'state',
@@ -68,6 +81,8 @@
     $('#fac-table tbody').innerHTML = settings.profiles.map((p, i) => `<tr>
       <td><input type="text" data-i="${i}" data-k="name" value="${esc(p.name)}" title="${esc(p.name)}"></td>
       <td><input type="text" data-i="${i}" data-k="affName" value="${esc(p.affName)}"></td>
+      <td><input type="text" data-i="${i}" data-k="address" value="${esc(p.address || '')}" title="${esc(p.address || '')}"></td>
+      <td><input type="text" data-i="${i}" data-k="phone" value="${esc(p.phone || '')}" style="width:100px"></td>
       <td><input type="text" data-i="${i}" data-k="custodian" value="${esc(p.custodian)}" placeholder="default"></td>
       <td><input type="text" data-i="${i}" data-k="county" value="${esc(p.county)}" placeholder="default" style="width:70px"></td>
       <td><button class="icon" data-del="${i}" title="Remove facility">✕</button></td></tr>`).join('');
@@ -164,7 +179,8 @@
   // Fields marked data-auto are filled by the tool until the user types in them.
   $$('[data-auto]').forEach(el => el.addEventListener('input', () => {
     S.manual[el.id] = true; el.classList.remove('auto');
-    if (el.id === 'f-facility') $('#fac-src').textContent = '';
+    // another facility typed / picked → its address and phone follow again
+    if (el.id === 'f-facility') { $('#fac-src').textContent = ''; delete S.manual['f-address']; delete S.manual['f-phone']; }
     refresh();
   }));
   function setAuto(id, v) {
@@ -625,7 +641,7 @@
     const sd = $('#f-sworn-date').value ? new Date($('#f-sworn-date').value + 'T12:00:00') : new Date();
     return {
       custodian: (prof && prof.custodian) || settings.custodian, title: settings.title,
-      address: settings.address, noInfo: settings.noInfo, retention: settings.retention, type: type(),
+      address: val('f-address') || settings.address, phone: val('f-phone'), noInfo: settings.noInfo, retention: settings.retention, type: type(),
       county: (prof && prof.county) || settings.county, state: settings.state,
       facility: printName(val('f-facility')), patient: val('f-patient'), dob: val('f-dob'),
       dosFrom: val('f-from'), dosTo: val('f-to'),
@@ -741,6 +757,11 @@
       }
     }
     setAuto('f-filename', AE.fileName(val('f-patient'), type(), null, val('f-reqid')));
+    // the selected facility's address and phone (from the facility list); typed values are kept
+    const fp = val('f-facility') ? activeProfile() : null;
+    setAuto('f-address', fp ? fp.address || '' : '');
+    setAuto('f-phone', fp ? fp.phone || '' : '');
+    $('#f-address').placeholder = settings.address ? `default: ${settings.address}` : '';
     const prof = activeProfile(), cd = caseData();
     $('#fac-profile').textContent = !val('f-facility') ? 'Pick the facility from the list (type to search).'
       : prof ? `Facility profile: ${prof.name} · custodian ${cd.custodian || '—'} · ${cd.county} County`
@@ -1306,7 +1327,7 @@
     if (S.req && S.req.doc) S.req.doc.destroy();
     if (S.lastUrl) URL.revokeObjectURL(S.lastUrl);
     resetState();
-    ['f-patient', 'f-dob', 'f-facility', 'f-from', 'f-to', 'f-pages', 'f-total', 'f-balance', 'f-reqid', 'f-filename'].forEach(id => { $('#' + id).value = ''; $('#' + id).classList.remove('auto', 'missing'); });
+    ['f-patient', 'f-dob', 'f-facility', 'f-from', 'f-to', 'f-pages', 'f-total', 'f-balance', 'f-reqid', 'f-address', 'f-phone', 'f-filename'].forEach(id => { $('#' + id).value = ''; $('#' + id).classList.remove('auto', 'missing'); });
     ['f-writeoff', 'f-paid', 'f-ins-paid', 'f-med-paid', 'f-pt-paid', 'f-adjust'].forEach(id => { $('#' + id).value = '0.00'; });
     $('#f-lien').value = '';
     $('#req-info').innerHTML = ''; $('#req-range').textContent = ''; $('#type-detected').textContent = '';
