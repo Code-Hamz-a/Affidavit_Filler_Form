@@ -1154,7 +1154,7 @@
       // "Please state whether any portion of the expenses… have been adjusted, written off and/or charged off"
       if (/\bany (portion|part)\b/.test(q) && /written off|write[- ]?off|charged off|adjusted|discounted/.test(q)) return 'yn_writeoff';
       // "Has X made or caused to be made any billing records… any payments made by the patient?"
-      if (/made or caused\b/.test(q) && /\bpayments?\b/.test(q)) return 'yes_payments';
+      if (/made or caused?\b/.test(q) && /\bpayments?\b/.test(q)) return 'yes_payments';
       // Business-records foundation questions — always "Yes" for a custodian.
       if (/custodian|provider under (medicare|medicaid)|regular(ly)? (course|practice|conducted)|course of regularly|at,? (or )?(near|about) the time|shortly after|reasonably soon|closely related to (or simultaneous with )?the (occurrence|event|act)|simultaneous with the (occurrence|event|act)|maintained as required|as required by (the )?regulations|photographed on|attached to each (film|cd|dvd|image|x-?ray)|aid in (the )?(treatment|diagnosis)|(person|employee|member|staff|individual|someone) with (personal )?knowledge|personal knowledge|at the time of (the )?(treatment|service|visit|examination|event|occurrence)|(very )?soon thereafter|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|(received?|accept(ed)?) (a |the )?subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
       return 'answer';
@@ -1169,7 +1169,8 @@
     if (/\brates?\b|fee schedule|names? of|name\(s\)|payment in full|accepted as payment/.test(q)) return 'answer';
     if (/lien/.test(q)) return 'amt_lien';
     // "…which have been paid by the patient themselves (and not by private insurance or some other person)?"
-    if (/paid/.test(q) && /\b(themselves|himself|herself)\b|\(and not by/.test(q)) return 'amt_pt_paid';
+    // "…paid by X and not by a private insurance company or some other person or entity? (…only include patient payments…)"
+    if (/paid/.test(q) && /\b(themselves|himself|herself)\b|\(and not by|\band not by (a |the |any )?(private )?(insur|third|other)|only include patient payments/.test(q)) return 'amt_pt_paid';
     // "What amount of the said current balance does the provider continue to seek from the patient…?"
     if (/continue to seek/.test(q)) return 'amt_sought';
     if (/(said|current) balance/.test(q)) return 'amt_balance';
