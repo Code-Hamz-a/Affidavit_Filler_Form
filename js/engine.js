@@ -1123,6 +1123,14 @@
     if (/\bstate whether\b/.test(q) && /true and correct|true copies|exact duplicates?/.test(q)) return 'yes';
     // "Are you currently making attempts to collect the outstanding balance…?" — not sought (as "continue to seek" → $0.00)
     if (/attempts? to collect|trying to collect|currently collecting/.test(q)) return 'no';
+    // The custodian is not a doctor: "Are you a Doctor of Medicine (M.D.), Doctor of Osteopathy (D.O.) or Doctor of Chiropractic?"
+    if (/^are you a (doctor|physician|medical doctor)\b|^are you a (licensed )?(m\.?d|d\.?o|d\.?c)\b/.test(q)) return 'no';
+    // …so the doctors-only follow-up "Are you licensed by the State of … to perform any procedure (healing, therapeutic…)?" does not apply
+    if (/^are you licensed\b/.test(q) && /procedure|healing|therapeutic|diagnostic|practice medicine/.test(q)) return 'na';
+    // "Please state whether the Doctor of Medicine, M.D., or Doctor of Osteopathy… has any agreement / has been disqualified…"
+    if (/doctor of (medicine|osteopathy|chiropractic)/.test(q) && !/^are you\b/.test(q)) return 'na';
+    // "Do you have any specialized training and licensing that would qualify you to assess the reasons for a course of treatment and its costs?"
+    if (/^do you have any (specialized |special |medical )?(training|education|licens)/.test(q) && /qualif/.test(q)) return 'no';
     if (yesNo) {
       // Nothing was taken out and nothing was held back.
       // Nothing destroyed or missing, no other place or provider holding this patient's records.
@@ -1139,7 +1147,7 @@
       // "Has X made or caused to be made any billing records… any payments made by the patient?"
       if (/made or caused\b/.test(q) && /\bpayments?\b/.test(q)) return 'yes_payments';
       // Business-records foundation questions — always "Yes" for a custodian.
-      if (/custodian|provider under (medicare|medicaid)|regular(ly)? (course|practice|conducted)|course of regularly|at,? (or )?(near|about) the time|shortly after|reasonably soon|closely related to (or simultaneous with )?the (occurrence|event|act)|simultaneous with the (occurrence|event|act)|maintained as required|as required by (the )?regulations|photographed on|attached to each (film|cd|dvd|image|x-?ray)|aid in (the )?(treatment|diagnosis)|person with knowledge|personal knowledge|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|(received?|accept(ed)?) (a |the )?subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
+      if (/custodian|provider under (medicare|medicaid)|regular(ly)? (course|practice|conducted)|course of regularly|at,? (or )?(near|about) the time|shortly after|reasonably soon|closely related to (or simultaneous with )?the (occurrence|event|act)|simultaneous with the (occurrence|event|act)|maintained as required|as required by (the )?regulations|photographed on|attached to each (film|cd|dvd|image|x-?ray)|aid in (the )?(treatment|diagnosis)|(person|employee|member|staff|individual|someone) with (personal )?knowledge|personal knowledge|at the time of (the )?(treatment|service|visit|examination|event|occurrence)|(very )?soon thereafter|exact duplicates?|true and correct|itemized statement|kept in the (regular )?course|possession, custody|custody,? (and |or |and\/or )?(subject to (your )?)?control|sound mind|understand (that )?the subpoena|(received?|accept(ed)?) (a |the )?subpoena|served with a subpoena|kept as described|have you (provided|produced|attached) all|have you (done so|done as requested|complied|(now )?(produced|provided))|legible|permanent part of the records|have you handed|handed over|in your custody|originals or true copies|true copies of|have you attached a complete|provide (medical )?treatment to|authorized .*\bto (produce|testify)|made or caused to be made|trustworth|(examined|treated|counseled|evaluated|seen) (by|at)\b|^are you aware that/.test(q)) return 'yes';
       return 'answer';
     }
     // "Please state your full name and the name and address of your employer."
