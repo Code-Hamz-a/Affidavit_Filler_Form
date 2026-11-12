@@ -1067,13 +1067,15 @@
     q = q.replace(/^\s*order\s*(no\.?|#|number)?\s*[:.]?\s*\d[\d.-]*\s+/, '')
       .replace(/^\s*(question|q)?\s*(no\.?|#)?\s*\d*\s*[.):-]?\s*/, '')
       .replace(/^if you (have )?answered yes to question (number )?\d+,?\s*/, '')
+      // "In your capacity as Custodian of Records, state if it is in the regular practice…" → "state if it is…"
+      .replace(/^in your capacity as (the )?custodian of (the )?records,?\s*(?=(please )?state (if|whether)\b)/, '')
       // "Of the total amount charged for treatment to X, how much was written off…" → ask only the last part
       .replace(/^of the total amount (charged|billed)[^,]*,\s*/, '');
     const handedOver = /have you (done so|done as requested|complied|(now )?(produced|provided))/.test(q);
     const yesNo = /^(are|is|were|was|have|has|do|does|did|can|will|would|if so)\b/.test(q) ||
       (/,\s*(was|were|is|are|did|does|has|have|will)\s/.test(q) && /\?\s*$/.test(q) && !/^(what|how|please)/.test(q)) ||
       (/\b(have|did|do|are|were|will) you\b[^?]*\?\s*$/.test(q) && !/^(what|how)\b/.test(q)) ||
-      /^(please )?state whether/.test(q) || handedOver;
+      /^(please )?state (whether|if)\b/.test(q) || handedOver;
     // "Please release the records… Identify how many pages you have released. Have you done as requested?"
     if (/how many pages|number of pages|total (number of )?pages|amount of pages/.test(q)) return handedOver ? 'yes_pages' : 'pages';
     // "If not, why not?" asked on its own after "Have you complied?" — the records were handed over
@@ -1131,6 +1133,10 @@
     if (/doctor of (medicine|osteopathy|chiropractic)/.test(q) && !/^are you\b/.test(q)) return 'na';
     // "Do you have any specialized training and licensing that would qualify you to assess the reasons for a course of treatment and its costs?"
     if (/^do you have any (specialized |special |medical )?(training|education|licens)/.test(q) && /qualif/.test(q)) return 'no';
+    // "Do you understand that failure to comply… could result in penalties…" / "…is under oath and subject to the penalties of perjury?"
+    if (/^do you understand\b/.test(q) && /penalt|sanction|perjury|under oath|subpoena|comply/.test(q)) return 'yes';
+    // a scan line break can drop the start: "regular course of your business? ("Business" means any kind of regularly organized activity…)"
+    if (/^regular(ly)? course of (your |the |its )?business\s*\?/.test(q)) return 'yes';
     if (yesNo) {
       // Nothing was taken out and nothing was held back.
       // Nothing destroyed or missing, no other place or provider holding this patient's records.
