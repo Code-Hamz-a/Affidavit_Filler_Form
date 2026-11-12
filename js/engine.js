@@ -1134,6 +1134,9 @@
     // "Do you have any specialized training and licensing that would qualify you to assess the reasons for a course of treatment and its costs?"
     if (/^do you have any (specialized |special |medical )?(training|education|licens)/.test(q) && /qualif/.test(q)) return 'no';
     // "Do you understand that failure to comply… could result in penalties…" / "…is under oath and subject to the penalties of perjury?"
+    // "If you answered "no" to Question Number 10, what records… did you not include…?" / "Who has the records you did not produce…?" — all were produced
+    if (/^if you (have )?answered\s*["'“”]?no["'“”]?,?\s*to (question|q)\b/.test(q)) return 'na';
+    if (/^who has (the )?records (that )?you (did not|didn't) (produce|provide|include)/.test(q)) return 'na';
     if (/^do you understand\b/.test(q) && /penalt|sanction|perjury|under oath|subpoena|comply/.test(q)) return 'yes';
     // a scan line break can drop the start: "regular course of your business? ("Business" means any kind of regularly organized activity…)"
     if (/^regular(ly)? course of (your |the |its )?business\s*\?/.test(q)) return 'yes';
