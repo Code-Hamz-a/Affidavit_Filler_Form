@@ -1137,6 +1137,10 @@
     // "If you answered "no" to Question Number 10, what records… did you not include…?" / "Who has the records you did not produce…?" — all were produced
     if (/^if you (have )?answered\s*["'“”]?no["'“”]?,?\s*to (question|q)\b/.test(q)) return 'na';
     if (/^who has (the )?records (that )?you (did not|didn't) (produce|provide|include)/.test(q)) return 'na';
+    // "Describe and detail any documents related to this patient, which you are withholding." — nothing is withheld
+    if (/^(please )?(describe|detail|identify|list)\b/.test(q) && /\bwithholding\b/.test(q)) return 'na';
+    // "Do you swear to the pains and penalties of perjury that you are turning over the entire file…?"
+    if (/^do you (swear|affirm|certify)\b/.test(q) && /turning over|produc|provid|entire file|all (the )?(documents|records)/.test(q)) return 'yes';
     if (/^do you understand\b/.test(q) && /penalt|sanction|perjury|under oath|subpoena|comply/.test(q)) return 'yes';
     // a scan line break can drop the start: "regular course of your business? ("Business" means any kind of regularly organized activity…)"
     if (/^regular(ly)? course of (your |the |its )?business\s*\?/.test(q)) return 'yes';
