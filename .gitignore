@@ -6,6 +6,9 @@
 *.png
 *.json
 *.zip
+*.xlsx
+*.xls
+*.csv
 
 # Editor / OS files
 .vscode/
