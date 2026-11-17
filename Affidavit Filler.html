@@ -21,6 +21,8 @@
   header .status b.bad { color: #ffb4a8; }
   header button { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.35); }
   header button:hover { background: rgba(255,255,255,.24); }
+  header a.nav { font-size: 13.5px; padding: 6px 12px; border-radius: 6px; background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.35); text-decoration: none; }
+  header a.nav:hover { background: rgba(255,255,255,.24); }
   main { display: grid; grid-template-columns: minmax(420px, 560px) 1fr; gap: 16px; padding: 16px; align-items: start; }
   main > section:last-child { align-self: stretch; } /* lets the preview card stay pinned while scrolling */
   @media (max-width: 1050px) { main { grid-template-columns: 1fr; } }
@@ -162,7 +164,8 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v3.36 · 17 Nov 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v3.37 · 17 Nov 2026 · <b id="app-ready">Loading…</b></span>
+  <a href="Itemized Billing.html" class="nav" title="CareCapital Billing Summary from a UB-04 / CMS-1500">Itemized Billing ↗</a>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
 
@@ -372,9 +375,9 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/facility-directory.js?v=3.36"></script>
-<script src="js/engine.js?v=3.36"></script>
-<script src="js/ocr.js?v=3.36"></script>
-<script src="js/app.js?v=3.36"></script>
+<script src="js/facility-directory.js?v=3.37"></script>
+<script src="js/engine.js?v=3.37"></script>
+<script src="js/ocr.js?v=3.37"></script>
+<script src="js/app.js?v=3.37"></script>
 </body>
 </html>

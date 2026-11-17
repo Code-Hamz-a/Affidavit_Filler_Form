@@ -71,6 +71,15 @@ If a request has no affidavit to fill, tick **Add a standard affidavit page**. I
 - a records affidavit (Tex. R. Evid. 902(10))
 - a billing affidavit (Tex. Civ. Prac. & Rem. Code § 18.001)
 
+## Itemized Billing (CareCapital)
+`Itemized Billing.html` is a separate page, opened from the **Itemized Billing** link in the Affidavit Filler header. It turns a CareCapital invoice into the CareCapital "Billing Summary" page.
+1. Upload one or more UB-04 or CMS-1500 PDFs. Scanned pages, and invoices whose text is a scrambled font, are read with the built-in OCR.
+2. The page reads every service line: date of service, CPT/HCPCS code with its modifiers, and charge. A UB-04 line without a CPT code shows its revenue code ("Rev 0360"). A line the OCR cannot read clearly is kept and marked yellow, so it can be fixed by hand.
+3. It also reads the patient name, DOB, patient # (UB-04 field 3a / CMS-1500 box 26), address, phone, date of injury (UB-04 occurrence code 01–06 or 11 / CMS-1500 box 14) and the facility from the facility list. Every value can be changed.
+4. **Line per CPT** gives each code its own line and charge. **Line per date** puts all codes of one date of service on one line with that day's total, like the template sample.
+5. Empty columns print as "N/A". The facility prints as "<facility> c/o Care Capital". The page warns when the lines do not add up to the invoice total.
+6. **Download PDF** saves `Patient Name_Bill.pdf`.
+
 ## Online version with sign-in (server/)
 The same tool can run on a company server, so that only invited people can use it:
 - There is no open sign-up. An admin creates each account and gives the user a one-time activation code.
@@ -85,6 +94,7 @@ Setup steps are in [server/DEPLOY.md](server/DEPLOY.md). The offline version (do
 - `Affidavit Filler.html`: the app
 - `js/engine.js`: finds and labels blanks, reads the request and invoices, and builds the PDF
 - `js/app.js`: the screen and workflow
+- `Itemized Billing.html` + `js/itemized-core.js` (reads invoice lines, draws the Billing Summary PDF) + `js/itemized-app.js` (the screen)
 - `js/ocr.js` + `lib/ocr-core.js` + `lib/ocr-eng-data.js`: offline OCR (Tesseract 5, English). These load only when a scanned PDF needs them.
 - `lib/`: pdf.js 3.11 and pdf-lib 1.17, stored locally so the app works offline
 - `server/`: the sign-in server (Node.js, Express, built-in SQLite): `src/` holds the server code, `public/` the sign-in pages and admin dashboard
