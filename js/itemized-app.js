@@ -1,5 +1,5 @@
 /*
- * Itemized Billing page: upload UB-04 / CMS-1500 invoices → CareCapital Billing Summary PDF ("Patient Name_Bill.pdf").
+ * Itemized Billing page: upload UB-04 / CMS-1500 invoices → CareCapital Billing Summary PDF ("REQ# CODE BR LAST, FIRST.pdf").
  * Everything stays in this browser tab — nothing is uploaded or saved.
  */
 (async function () {
@@ -7,7 +7,7 @@
   const $ = s => document.querySelector(s);
   const val = id => ($('#' + id).value || '').trim();
   const S = { files: [], lines: [], mode: 'cpt', manual: new Set(), bytes: null, seq: 0, renderSeq: 0 };
-  const FIELDS = ['f-patient', 'f-account', 'f-dob', 'f-phone', 'f-guarantor', 'f-address', 'f-facility', 'f-provider', 'f-plan', 'f-doi', 'f-diagnosis', 'f-description'];
+  const FIELDS = ['f-reqid', 'f-patient', 'f-account', 'f-dob', 'f-phone', 'f-guarantor', 'f-address', 'f-facility', 'f-provider', 'f-plan', 'f-doi', 'f-diagnosis', 'f-description'];
 
   // facility list for the Facility box
   $('#fac-list').innerHTML = (window.FACILITY_DIRECTORY || []).map(f => `<option value="${esc(f[0])}">`).join('');
@@ -90,7 +90,7 @@
           for (const l of inv.lines) S.lines.push({ id: ++S.seq, file: rec.id, dos: IB.fmtDate(l.dos), proc: IB.procText(l), charge: l.charge != null ? AE.fmtMoney(l.charge) : '', desc: l.desc || '', check: !!l.check });
           const unsure = inv.lines.filter(l => l.check).length;
           if (unsure) rec.notes.push(`${unsure} line${unsure > 1 ? 's' : ''} could not be read clearly (yellow) — check the code and charge against the invoice.`);
-          setAuto('f-patient', inv.patient); setAuto('f-dob', inv.dob); setAuto('f-account', inv.account);
+          setAuto('f-reqid', AE.requestId(file.name)); setAuto('f-patient', inv.patient); setAuto('f-dob', inv.dob); setAuto('f-account', inv.account);
           setAuto('f-address', inv.address); setAuto('f-phone', inv.phone); setAuto('f-facility', inv.facility);
           setAuto('f-doi', inv.doi);
         } catch (e) {
@@ -192,10 +192,13 @@
   }
 
   let timer = null;
+  const outName = () => IB.fileName(val('f-patient'), val('f-reqid'), val('f-facility'));
+
   function refresh() {
     const total = S.lines.reduce((s, l) => s + (AE.parseMoney(l.charge) || 0), 0);
     $('#total').textContent = '$' + AE.fmtMoney(Math.round(total * 100) / 100);
-    $('#fname').textContent = IB.fileName(val('f-patient'));
+    $('#fname').textContent = outName();
+    $('#f-reqid').classList.toggle('missing', !val('f-reqid') && (S.files.length > 0 || S.lines.length > 0));
     $('#f-patient').classList.toggle('missing', !val('f-patient') && (S.files.length > 0 || S.lines.length > 0));
     $('#f-facility').classList.toggle('missing', !val('f-facility') && (S.files.length > 0 || S.lines.length > 0));
     const msgs = [];
@@ -249,7 +252,7 @@
     if (!val('f-patient') && !confirm('The patient name is empty — download anyway?')) return;
     const url = URL.createObjectURL(new Blob([S.bytes], { type: 'application/pdf' }));
     const a = document.createElement('a');
-    a.href = url; a.download = IB.fileName(val('f-patient'));
+    a.href = url; a.download = outName();
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   });

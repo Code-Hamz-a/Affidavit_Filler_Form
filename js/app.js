@@ -757,7 +757,7 @@
         }
       }
     }
-    setAuto('f-filename', AE.fileName(val('f-patient'), type(), null, val('f-reqid')));
+    setAuto('f-filename', AE.fileName(val('f-patient'), type(), null, val('f-reqid'), val('f-facility')));
     // the selected facility's address and phone (from the facility list); typed values are kept
     const fp = val('f-facility') ? activeProfile() : null;
     setAuto('f-address', fp ? fp.address || '' : '');
@@ -1301,7 +1301,7 @@
       const filledPages = new Set([...fills.filter(f => (f.value || '').trim()).map(f => f.page), ...ink.map(k => k.page)]);
       const whiteouts = S.req ? S.req.pages.filter(p => filledPages.has(p.num)).flatMap(p => (p.whiteouts || []).map(w => ({ ...w, page: p.num }))) : [];
       const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, ink, attachments, standard, whiteouts });
-      let name = val('f-filename') || AE.fileName(d.patient, type(), null, val('f-reqid'));
+      let name = val('f-filename') || AE.fileName(d.patient, type(), null, val('f-reqid'), val('f-facility'));
       if (!/\.pdf$/i.test(name)) name += '.pdf';
       name = name.replace(/[\\/:*?"<>|]+/g, '');
       const blob = new Blob([bytes], { type: 'application/pdf' });

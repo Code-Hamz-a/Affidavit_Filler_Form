@@ -1845,12 +1845,54 @@
     return page;
   }
 
-  // Output file name: "RequestID_Patient Name.pdf" (just "Patient Name.pdf" until a request ID is known).
-  AE.fileName = function (patient, type, pattern, reqId) {
+  // Facility initials used in ChartSwap / ChartX file names.
+  const FILE_CODES = [
+    [/river oaks|\brohc\b/, 'ROHC'],
+    [/advanced surgeons|\baspn\b/, 'ASPN'],
+    [/\bad hospital east\b|\badhe\b/, 'ADHE'],
+    [/chopra/, 'CHOPRA'],
+    [/advanced dallas|\ba\.? dallas hospital|\badhc\b/, 'ADHC'],
+    [/texas brain center|\btbc\b/, 'TBC'],
+    [/dynamic anesthesia/, 'CC DAP'],
+    [/integrity health ?care/, 'CC IHS'],
+    [/psychiatry of texas/, 'CC POT'],
+    [/city ambulance/, 'CA'],
+    [/charles (a\.? )?garcia/, 'CC CG'],
+    [/zippo/, 'CC ZPO'],
+    [/\brmc pharmacy\b/, 'RMC'],
+  ];
+  AE.fileCode = function (facility) {
+    const f = String(facility || '').toLowerCase();
+    const hit = f && FILE_CODES.find(([re]) => re.test(f));
+    return hit ? hit[1] : '';
+  };
+
+  // "Jane A. Doe" / "DOE, JANE A" → "DOE, JANE"
+  AE.lastFirst = function (patient) {
+    const s = String(AE.stripParty(patient) || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!s) return '';
+    const SUF = /^(jr|sr|ii|iii|iv|v)\.?$/i;
+    let last, first;
+    const c = s.split(',').map(x => x.trim()).filter(Boolean);
+    if (c.length >= 3 && SUF.test(c[1])) { last = c[0] + ' ' + c[1].replace(/\.$/, ''); first = c[2].split(' ')[0]; }
+    else if (c.length >= 2 && !SUF.test(c[1])) { last = c[0]; first = c[1].split(' ')[0]; }
+    else {
+      const w = c.join(' ').split(' ');
+      let sfx = '';
+      if (w.length > 2 && SUF.test(w[w.length - 1])) sfx = ' ' + w.pop().replace(/\.$/, '');
+      if (w.length < 2) return s.toUpperCase();
+      last = w.pop() + sfx; first = w[0];
+    }
+    return (last + (first ? ', ' + first : '')).toUpperCase();
+  };
+
+  // Output file name: "REQ# CODE BR|MR LAST, FIRST.pdf", e.g. "1000099999 ROHC MR DOE, JANE.pdf".
+  // Parts that are not known yet (request ID, facility code) are left out.
+  AE.fileName = function (patient, type, pattern, reqId, facility) {
     const clean = s => String(s || '').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim();
-    const name = clean(AE.stripParty(patient)) || 'Patient', id = clean(reqId);
-    const p = pattern || (id ? '{id}_{name}' : '{name}');
-    return p.replace('{id}', id).replace('{name}', name) + '.pdf';
+    const name = AE.lastFirst(patient) || 'PATIENT';
+    const parts = [clean(reqId), AE.fileCode(facility), type === 'billing' ? 'BR' : 'MR', name];
+    return clean(parts.filter(Boolean).join(' ')) + '.pdf';
   };
 
   // Request ID: a "Request ID / Request # / Request No." printed in the request, else the number in its file name

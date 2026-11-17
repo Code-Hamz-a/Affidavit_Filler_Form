@@ -409,7 +409,9 @@
     return doc.save();
   };
 
-  IB.fileName = function (patient) {
+  // "REQ# CODE BR LAST, FIRST.pdf", same rule as the Affidavit Filler (AE.fileName).
+  IB.fileName = function (patient, reqId, facility) {
+    if (AE && AE.fileName) return AE.fileName(patient, 'billing', null, reqId, facility);
     const n = String(patient || 'Patient').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Patient';
     return `${n}_Bill.pdf`;
   };
