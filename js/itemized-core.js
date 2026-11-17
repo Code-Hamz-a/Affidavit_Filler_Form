@@ -13,7 +13,7 @@
   const IB = {};
 
   // ------------------------------------------------------------ tokens
-  // A line's items split into words, each with its own x (so "CUEVAS, JULIO" in one item is two words).
+  // A line's items split into words, each with its own x (so "DOE, JOHN" in one item is two words).
   function tokens(line) {
     const out = [];
     for (const it of line.items) {
