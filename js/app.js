@@ -55,6 +55,14 @@
     }
     settings.dirVersion = DIR_VERSION; saveSettings();
   }
+  // Entries taken out of the company list later: removed once from saved lists too.
+  const DIR_REMOVED = [[2, 'Bruce K. Smith']];
+  const dirRemoved = settings.dirRemoved || 0;
+  if (DIR_REMOVED.some(([v]) => v > dirRemoved)) {
+    const gone = new Set(DIR_REMOVED.filter(([v]) => v > dirRemoved).map(([, n]) => AE.normName(n)));
+    settings.profiles = settings.profiles.filter(x => !(x && gone.has(AE.normName(x.name))));
+    settings.dirRemoved = Math.max(...DIR_REMOVED.map(([v]) => v)); saveSettings();
+  }
 
   const SETTING_FIELDS = {
     's-custodian': 'custodian', 's-title': 'title', 's-county': 'county', 's-state': 'state',

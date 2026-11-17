@@ -5,7 +5,6 @@
     ["Center For Scoliosis & Advanced Spine Surgery PLLC c/o Care Capital", "PO Box 301103, Houston, Texas 77230", "713-848-4729"],
     ["RMC Pharmacy", "4140 Southwest Fwy, Houston, Texas 77027", "713-321-2386"],
     ["Spine & Orthopedic Surgical Institute c/o Care Capital", "PO Box 301103, Houston, Texas 77230", "713-489-7720"],
-    ["Bruce K. Smith", "PO Box 301103, Houston, Texas 77230", "713-489-7720"],
     ["John Sazy MD c/o Care Capital", "P.O. Box 301103, Houston, Texas 77230", "713-489-7720"],
     ["Trend Health Care", "PO Box 734875, Dallas, Texas 75373", "713-489-7720"],
     ["Texas Institute of Chest and Sleep Disorder c/o Care Capital", "PO Box 301103, Houston, Texas 77230", "713-489-7720"],
