@@ -1108,7 +1108,9 @@
     if (/managed care|contractual arrangement|terms of .*coverage|preceding (two|three|four|\d+) questions|purchased or assigned|purchasing third party|contracts? or agreements?|contract\(s\)|contract with medicare/.test(q)) return 'no_knowledge';
     // "Do you have any reason to believe the records have been edited, purged, culled…?" / "…has anyone suggested any part be withheld?"
     if (/reason to believe/.test(q) && /edited|purged|culled|altered|changed|made different/.test(q)) return 'no';
-    if (/(requested|directed|suggested)\b/.test(q) && /withheld|protected from discovery/.test(q)) return 'no';
+    if (/(requested|directed|suggested)\b/.test(q) && /withheld|protected from discovery|\bwithhold or protect\b/.test(q)) return 'no';
+    // "If any document responsive to the subpoena was, but is no longer, in your possession… missing or lost, destroyed…" — nothing was
+    if (/^if any (document|record)s?\b/.test(q) && /no longer/.test(q) && /missing|lost|destroyed|disposed|transferred/.test(q)) return 'na';
     // "If your answer to the preceding question is yes, please hand a copy of such records to the notary…"
     if (/^if your answer\b.*\byes\b/.test(q) && /\b(hand|attach|produce|furnish|deliver)\b/.test(q) && /\b(cop(y|ies)|records?|films?)\b/.test(q)) return 'yes';
     // "Please hand / release / produce the records to the Officer (Notary)…" / "Have you handed the records to the Officer?"
