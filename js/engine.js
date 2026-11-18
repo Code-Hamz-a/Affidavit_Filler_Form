@@ -1887,13 +1887,13 @@
   };
 
   // Output file name: "REQ#_CODE_BR|MR_LAST,FIRST.pdf", e.g. "1000099999_ROHC_MR_DOE,JANE.pdf",
-  // "1000099999_CC DAP_BR_DOE,JANE.pdf" — spaces become underscores, except inside the facility code.
+  // "1000099999_CC_DAP_BR_DOE,JANE.pdf" — every space becomes an underscore; no space after the comma.
   // Parts that are not known yet (request ID, facility code) are left out.
   AE.fileName = function (patient, type, pattern, reqId, facility) {
     const clean = s => String(s || '').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim();
     const us = s => clean(s).replace(/ /g, '_');
     const name = AE.lastFirst(patient) || 'PATIENT';
-    const parts = [us(reqId), clean(AE.fileCode(facility)), type === 'billing' ? 'BR' : 'MR', us(name.replace(/,\s*/g, ','))];
+    const parts = [us(reqId), us(AE.fileCode(facility)), type === 'billing' ? 'BR' : 'MR', us(name.replace(/,\s*/g, ','))];
     return parts.filter(Boolean).join('_') + '.pdf';
   };
 
