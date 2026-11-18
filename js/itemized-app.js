@@ -1,5 +1,5 @@
 /*
- * Itemized Billing page: upload UB-04 / CMS-1500 invoices → CareCapital Billing Summary PDF ("REQ# CODE BR LAST, FIRST.pdf").
+ * Itemized Billing page: upload UB-04 / CMS-1500 invoices → CareCapital Billing Summary PDF ("REQ#_CODE_BR_LAST,_FIRST.pdf").
  * Everything stays in this browser tab — nothing is uploaded or saved.
  */
 (async function () {
