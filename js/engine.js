@@ -1886,13 +1886,15 @@
     return (last + (first ? ', ' + first : '')).toUpperCase();
   };
 
-  // Output file name: "REQ#_CODE_BR|MR_LAST,_FIRST.pdf", e.g. "1000099999_ROHC_MR_DOE,_JANE.pdf" (every space is an underscore).
+  // Output file name: "REQ#_CODE_BR|MR_LAST,_FIRST.pdf", e.g. "1000099999_ROHC_MR_DOE,_JANE.pdf",
+  // "1000099999_CC DAP_BR_DOE,_JANE.pdf" — spaces become underscores, except inside the facility code.
   // Parts that are not known yet (request ID, facility code) are left out.
   AE.fileName = function (patient, type, pattern, reqId, facility) {
     const clean = s => String(s || '').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim();
+    const us = s => clean(s).replace(/ /g, '_');
     const name = AE.lastFirst(patient) || 'PATIENT';
-    const parts = [clean(reqId), AE.fileCode(facility), type === 'billing' ? 'BR' : 'MR', name];
-    return clean(parts.filter(Boolean).join(' ')).replace(/ /g, '_') + '.pdf';
+    const parts = [us(reqId), clean(AE.fileCode(facility)), type === 'billing' ? 'BR' : 'MR', us(name)];
+    return parts.filter(Boolean).join('_') + '.pdf';
   };
 
   // Request ID: a "Request ID / Request # / Request No." printed in the request, else the number in its file name
