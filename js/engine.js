@@ -1617,6 +1617,17 @@
 
   // Share of a page's characters that are real letters/digits. Some PDFs use fonts whose text comes out
   // as control characters (looks fine on screen, unreadable to the tool).
+  // A page whose text layer is a scrambled font (custom glyph codes, e.g. some court-reporting "Custodian Packets"):
+  // it looks fine on screen but the text reads as control characters and symbols, so it must be read with OCR.
+  AE.isScrambledPage = function (p) {
+    const t = AE.fullText([p]).replace(/\s+/g, '');
+    if (t.length < 40) return false;
+    const ctrl = (t.match(/[\u0000-\u001f\u007f-\u009f�]/g) || []).length;
+    const core = t.replace(/[_.\-–—]/g, '');
+    const alnum = (core.match(/[A-Za-z0-9]/g) || []).length;
+    return ctrl / t.length > 0.05 || (core.length >= 40 && alnum / core.length < 0.4);
+  };
+
   AE.readableShare = function (pages) {
     const t = AE.fullText(pages).replace(/\s+/g, '');
     if (!t) return 0;

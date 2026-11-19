@@ -38,6 +38,7 @@ Double-click **Affidavit Filler.html**. It opens in Chrome or Edge and needs no 
    - For billing subpoenas, open **Payment details** in step 3 to enter the payment breakdown.
    - **Scanned PDFs** (only a picture, for example from a Canon scanner) are read with the built-in OCR. This takes about 4 seconds per page, and progress is shown. It works offline too. Check the values afterwards, because OCR can misread a word.
    - **Bad copies and faxes:** crooked pages, grey paper, faint or broken lines and specks are handled. A page also counts as a scan when a fax header or a poor text layer sits on top of the picture. The tool finds the printed lines in the picture and whitens them, and removes specks, in a private copy that only the OCR reads, so the page in your PDF is not changed. Words the OCR misread ("arc", "clectronic", "vour") are repaired only for choosing the answer; the question shown stays as it was read.
+   - **Requests with a scrambled-font text layer** (the page looks normal, but copied text comes out as symbols, for example some court-reporting "Custodian Packets") are read with the built-in OCR the same way.
    - **Not handled:** a page scanned sideways or upside down. Rotate it first, then load it.
 3. **Case details**: check the values. Any required field that is empty turns red, and the PDF can't be created until it is filled in (patient, DOB, facility, DOS).
 4. **Records / invoices**: drop in all the files (Part 1, Part 2, …).

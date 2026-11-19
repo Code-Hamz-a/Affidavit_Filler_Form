@@ -341,12 +341,13 @@
   // Scanned or faxed pages are read with the built-in OCR so their blanks can be found. The printed lines are found
   // in the pixels first and whitened from the copy the OCR reads; the page itself is not changed.
   const SCAN_SCALE = 3.5;
+  // Pages whose text is a scrambled font are read the same way.
   async function ocrScannedPages(r) {
-    const scanned = r.pages.filter(p => AE.isScanPage(p));
+    const scanned = r.pages.filter(p => AE.isScanPage(p) || AE.isScrambledPage(p));
     if (!scanned.length) return 0;
     for (let k = 0; k < scanned.length; k++) {
       const p = scanned[k];
-      busy(true, `Scanned PDF — reading the text (OCR), page ${k + 1} of ${scanned.length}…` + (k === 0 ? ' (first page takes a few seconds longer)' : ''));
+      busy(true, `Reading the text with OCR (scanned or unreadable text), page ${k + 1} of ${scanned.length}…` + (k === 0 ? ' (first page takes a few seconds longer)' : ''));
       await new Promise(res => setTimeout(res, 30)); // let the message show
       try {
         const { vp, canvas, ctx } = await renderPage(r.doc, p.num, SCAN_SCALE);
