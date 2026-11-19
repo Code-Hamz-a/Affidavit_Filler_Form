@@ -903,6 +903,8 @@
         if (/(owing|owed|owes)\b.*\b(patient|plaintiff|claimant|guarantor)/.test(src)) return 'amt_balance';
         if (/paid by (the )?(patient|plaintiff|claimant|guarantor)/.test(src)) return 'amt_pt_paid';
         if (/paid by .*(insur|medicaid|medicare|payor|payer)/.test(src)) return 'amt_payor_paid';
+        // "The total amount health insurance PAID was $"
+        if (/(insurance|insurer|medicaid|medicare|payor|payer)s?\s+(has |have )?(paid|payments?)\b/.test(src)) return 'amt_payor_paid';
         if (/written off|write[- ]?off|discount/.test(src)) return 'amt_writeoff';
         if (/unpaid|right to be paid|outstanding|balance|legally entitled|due|remains owing|still owing/.test(src)) return 'amt_balance';
         if (/amount paid|been paid|paid for|payments?\b/.test(src)) return 'amt_paid';
