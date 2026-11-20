@@ -1737,6 +1737,14 @@
    *   standard: null | {type, data, insertAfter}   // generated affidavit page
    * }
    */
+  // Where a signature picture goes on a signature line: standing on the line, at most 30pt high, inside the line's width.
+  AE.signatureBox = function (f, iw, ih) {
+    const maxW = Math.max(30, (f.w || 150) - 6), maxH = 30;
+    const k = iw && ih ? Math.min(maxW / iw, maxH / ih) : 0;
+    const w = k ? iw * k : Math.min(maxW, 120), h = k ? ih * k : maxH;
+    return { x: f.x + 4, y: f.y + 0.5, w, h };
+  };
+
   AE.buildPdf = async function (opts) {
     const { PDFDocument, rgb } = AE.PDFLib;
     let out;
@@ -1769,6 +1777,10 @@
     const keepSet = opts.keepPages ? new Set(opts.keepPages) : null;
     let form = null, nField = 0;
     try { form = out.getForm(); } catch (e) { form = null; }
+    // the user's signature picture (PNG) goes on the affiant signature lines
+    let sigImg = null;
+    if (opts.signature && opts.signature.png) { try { sigImg = await out.embedPng(opts.signature.png); } catch (e) { console.error(e); } }
+    const drawSig = (page, f) => { const r = AE.signatureBox(f, sigImg.width, sigImg.height); page.drawImage(sigImg, { x: r.x, y: r.y, width: r.w, height: r.h }); };
     const addField = (page, f, v, size) => {
       const tf = form.createTextField(`aff_${String(f.name || 'field').replace(/[^A-Za-z0-9_]/g, '')}_${++nField}`);
       if (v) tf.setText(v);
@@ -1793,6 +1805,7 @@
       const page = pages[f.page - 1];
       if (!page) continue;
       if (f.field && keepSet && !keepSet.has(f.page)) continue;
+      if (f.sig && sigImg && !v) { drawSig(page, f); continue; }
       if (f.cover && v) {
         // White out a wrong value that was already written on the blank — stop above the underline.
         const y0 = Math.max(f.cover.y0 - 1.5, f.y + 0.6);
@@ -1824,7 +1837,10 @@
     }
 
     if (opts.standard) {
-      const sp = drawStandard(out, font, bold, safe, opts.standard, form ? (page, f, v) => { try { addField(page, f, safe(v || ''), f.size || 10); } catch (e) { console.error(e); } } : null);
+      const sp = drawStandard(out, font, bold, safe, opts.standard, form ? (page, f, v) => {
+        if (f.name === 'signature' && sigImg) return drawSig(page, f);
+        try { addField(page, f, safe(v || ''), f.size || 10); } catch (e) { console.error(e); }
+      } : (sigImg ? (page, f) => { if (f.name === 'signature') drawSig(page, f); } : null));
       const at = Math.min(opts.standard.insertAt ?? 0, out.getPageCount());
       out.insertPage(at, sp);
     }
