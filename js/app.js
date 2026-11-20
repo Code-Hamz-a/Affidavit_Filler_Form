@@ -134,7 +134,7 @@
   });
   // Export / import settings so colleagues get the same facilities and subpoena answers (no patient data inside).
   $('#set-export').addEventListener('click', () => {
-    const { signature, sigW, sigH, notarySig, nsigW, nsigH, notaryStamp, stampW, stampH, stampPlace, sigPlace, nsigPlace, ...shared } = settings; // signatures / stamp never leave this browser
+    const { signature, sigW, sigH, notarySig, nsigW, nsigH, notaryStamp, stampW, stampH, stampPlace, sigPlace, nsigPlace, picCopies, ...shared } = settings; // signatures / stamp never leave this browser
     const blob = new Blob([JSON.stringify({ app: 'Affidavit Filler', exported: new Date().toISOString(), settings: shared }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'Affidavit Filler settings.json';
@@ -308,6 +308,7 @@
       S.userAff = new Set();
       S.affPages = new Set(r.pages.filter(p => AE.isAffidavitPage(p)).map(p => p.num));
       S.blanks = blanks.filter(b => b.pageHasAffidavit && S.affPages.has(b.page)).map(toBlankRow);
+      restorePics();
 
       $$('input[name=type]').forEach(r => { r.checked = r.value === info.type; });
       $('#type-detected').textContent = `(detected: ${info.type})`;
@@ -1197,7 +1198,7 @@
           } else { pc.x = st.x + p[0] - p0[0]; pc.y = st.y + p[1] - p0[1]; }
           place();
         };
-        const up = () => { box.classList.remove('drag'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+        const up = () => { box.classList.remove('drag'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); savePics(); };
         window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
       });
       box.addEventListener('click', e => e.stopPropagation());
@@ -1341,7 +1342,7 @@
       ? { p: c.p, page: onPage.page, w: c.w, h: c.h, x: onPage.pt[0] - c.w / 2, y: onPage.pt[1] - c.h / 2 }
       : { p: c.p, page: c.page, w: c.w, h: c.h, x: c.x + 18, y: c.y - 18 };
     if (onPage && Math.abs(pc.x - c.x) < 4 && Math.abs(pc.y - c.y) < 4 && pc.page === c.page) { pc.x += 18; pc.y -= 18; }
-    S.pics.push(pc); S.undo.push({ pic: pc });
+    S.pics.push(pc); S.undo.push({ pic: pc }); savePics();
     S.clip = { ...c, page: pc.page, x: pc.x, y: pc.y }; // the next paste goes next to this one
     S.picked = { p: pc.p, page: pc.page, pic: pc, rect: () => pc };
     renderOverlays();
@@ -1349,7 +1350,30 @@
   function removePic(pc) {
     S.pics = S.pics.filter(x => x !== pc);
     if (S.picked && S.picked.pic === pc) S.picked = null;
-    renderOverlays();
+    savePics(); renderOverlays();
+  }
+  // Copies are remembered for the next requests relative to their original's line: same distance from the first
+  // signature line (affiant) / notary line (notary signature, stamp), same number of pages after it, same size.
+  function picAnchor(p) {
+    const slot = SIG_SLOTS.find(x => x.p === p);
+    const b = slot && S.blanks.find(x => x.kind === slot.kind && !x.prefilled && S.affPages.has(x.page));
+    return b ? { page: b.page, box: (slot.stamp ? AE.stampBox : AE.signatureBox)(b, settings[slot.w] || 0, settings[slot.h] || 0) } : null;
+  }
+  function savePics() {
+    const out = [];
+    for (const pc of S.pics) {
+      const a = picAnchor(pc.p);
+      if (a) out.push({ p: pc.p, dPage: pc.page - a.page, dx: pc.x - a.box.x, dy: pc.y - a.box.y, w: pc.w, h: pc.h });
+    }
+    if (out.length) settings.picCopies = out; else delete settings.picCopies;
+    saveSettings();
+  }
+  function restorePics() {
+    S.pics = [];
+    for (const c of settings.picCopies || []) {
+      const a = picAnchor(c.p), page = a && a.page + c.dPage;
+      if (a && S.affPages.has(page)) S.pics.push({ p: c.p, page, x: a.box.x + c.dx, y: a.box.y + c.dy, w: c.w, h: c.h });
+    }
   }
 
   // Esc leaves the tool; Ctrl+Z takes back the last text / pen line; Delete removes the selected text; arrows nudge it.
