@@ -134,7 +134,7 @@
   });
   // Export / import settings so colleagues get the same facilities and subpoena answers (no patient data inside).
   $('#set-export').addEventListener('click', () => {
-    const { signature, sigW, sigH, notarySig, nsigW, nsigH, notaryStamp, stampW, stampH, ...shared } = settings; // signatures / stamp never leave this browser
+    const { signature, sigW, sigH, notarySig, nsigW, nsigH, notaryStamp, stampW, stampH, stampPlace, ...shared } = settings; // signatures / stamp never leave this browser
     const blob = new Blob([JSON.stringify({ app: 'Affidavit Filler', exported: new Date().toISOString(), settings: shared }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'Affidavit Filler settings.json';
@@ -171,8 +171,11 @@
   const SIG_SLOTS = [
     { p: 'sig', url: 'signature', w: 'sigW', h: 'sigH', use: 'sigUse', kind: 'signature', what: 'signature' },
     { p: 'nsig', url: 'notarySig', w: 'nsigW', h: 'nsigH', use: 'nsigUse', kind: 'notary_sig', what: 'notary signature' },
-    { p: 'stamp', url: 'notaryStamp', w: 'stampW', h: 'stampH', use: 'stampUse', kind: 'notary_sig', what: 'notary stamp', stamp: true },
+    { p: 'stamp', url: 'notaryStamp', w: 'stampW', h: 'stampH', use: 'stampUse', kind: 'notary_sig', what: 'notary stamp', stamp: true, remember: 'stampPlace' },
   ];
+  // Where a picture sits on this blank: moved here for this request, else the spot remembered from the last move (stamp).
+  const slotPlace = (b, slot) => (b.place && b.place[slot.p]) || (slot.remember && settings[slot.remember]) || null;
+  const blankPlace = b => { const o = {}; for (const slot of SIG_SLOTS) { const pl = slotPlace(b, slot); if (pl) o[slot.p] = pl; } return Object.keys(o).length ? o : null; };
   const sigActive = slot => !!(settings[slot.url] && settings[slot.use] !== false);
   function showSignature() {
     for (const slot of SIG_SLOTS) {
@@ -1122,7 +1125,7 @@
       box.title = `${slot.what[0].toUpperCase() + slot.what.slice(1)} — drag to move · drag the blue corner to resize · double-click to reset`;
       box.innerHTML = `<img src="${settings[slot.url]}" alt=""><span class="rs"></span>`;
       const place = () => {
-        const r = AE.placeBox(base, b.place && b.place[slot.p]);
+        const r = AE.placeBox(base, slotPlace(b, slot));
         const p1 = pv.vp.convertToViewportPoint(r.x, r.y + r.h), p2 = pv.vp.convertToViewportPoint(r.x + r.w, r.y);
         Object.assign(box.style, { left: Math.min(p1[0], p2[0]) + 'px', top: Math.min(p1[1], p2[1]) + 'px', width: Math.abs(p2[0] - p1[0]) + 'px', height: Math.abs(p2[1] - p1[1]) + 'px' });
       };
@@ -1133,7 +1136,7 @@
         const resize = e.target.classList.contains('rs');
         const rect = pv.wrap.getBoundingClientRect();
         const at = ev => pv.vp.convertToPdfPoint(ev.clientX - rect.left, ev.clientY - rect.top);
-        const p0 = at(e), st = { dx: 0, dy: 0, s: 1, ...((b.place && b.place[slot.p]) || {}) };
+        const p0 = at(e), st = { dx: 0, dy: 0, s: 1, ...(slotPlace(b, slot) || {}) };
         box.classList.add('drag');
         const move = ev => {
           const p = at(ev), pl = { ...st };
@@ -1144,11 +1147,20 @@
           b.place = { ...(b.place || {}), [slot.p]: pl };
           place();
         };
-        const up = () => { box.classList.remove('drag'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+        const up = () => {
+          box.classList.remove('drag'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+          // the stamp's spot is remembered for the next requests too
+          if (slot.remember && b.place && b.place[slot.p]) { settings[slot.remember] = b.place[slot.p]; saveSettings(); }
+        };
         window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
       });
       box.addEventListener('click', e => e.stopPropagation());
-      box.addEventListener('dblclick', e => { e.stopPropagation(); if (b.place) delete b.place[slot.p]; place(); });
+      box.addEventListener('dblclick', e => {
+        e.stopPropagation();
+        if (b.place) delete b.place[slot.p];
+        if (slot.remember && settings[slot.remember]) { delete settings[slot.remember]; saveSettings(); }
+        place();
+      });
       pv.wrap.appendChild(box);
     }
     for (const b of [...S.blanks, ...S.customs]) {
@@ -1400,7 +1412,7 @@
       const fills = [...S.blanks.filter(b => b.include || (NOTARY.test(b.kind) && !b.prefilled)), ...S.customs].filter(b => S.affPages.has(b.page)).map(b => b.user
         ? { page: b.page, x: b.x, y: b.y, free: true, size: b.size, color: hexRgb(b.color), value: b.override || '' }
         : {
-          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null, field: true, name: b.kind, sig: b.kind === 'signature' ? 'affiant' : b.kind === 'notary_sig' ? 'notary' : null, place: b.place || null,
+          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null, field: true, name: b.kind, sig: b.kind === 'signature' ? 'affiant' : b.kind === 'notary_sig' ? 'notary' : null, place: blankPlace(b),
           value: b.include ? shownValue(b) : '',
           align: /^(pages|notary_day|notary_year2|notary_year4)$/.test(b.kind) ? 'center' : 'left'
         });
