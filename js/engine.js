@@ -1097,6 +1097,19 @@
     if (/have you produced (any and )?all\b/.test(q) && /communications?|letters? of protection|financial interest/.test(q)) return 'all_provided';
     // "…what is the basis of your personal knowledge regarding the billing…?"
     if (/basis of your (personal )?knowledge/.test(q)) return 'knowledge_basis';
+    // "Have you been served with a Subpoena Duces Tecum for… ALL BILLING RECORDS… including… letters of protection…?"
+    if (/^have you (been served|received|accepted) (with )?(a |the )?subpoena\b/.test(q)) return 'yes';
+    // "Are you familiar with whether or not procedures require that patient account records be kept…?" / "Do you have such records and data with you?"
+    if (/^(in your official capacity,? )?are you familiar with\b/.test(q) && /records? (be |are )?kept|procedures?/.test(q)) return 'yes';
+    if (/^do you have (such|these|the) records( and data)? with you\b/.test(q)) return 'yes';
+    // "If … has received payments from Medicare…, please provide the … Claim Number (HICN)." — self-pay, nothing from Medicare
+    if (/^if\b/.test(q) && /received payments? from (medicare|medicaid)/.test(q) && /claim number|hicn|\bmbi\b/.test(q)) return 'na';
+    // "What are the total payments… paid by any third party (… private insurance…) … toward the balance…?"
+    if (/total payments?/.test(q) && /third party|other than the patient/.test(q)) return 'amt_payor_paid';
+    // Insurance submission, negotiated rates, cash-discount policy, self-pay agreements — the provider's office knows, not the custodian
+    if (/submitted to (the )?patient'?s insurance|not submitted to (the )?patient'?s insurance|negotiated payment|cash discount for/.test(q)) return 'no_knowledge';
+    if (/^if so,? please provide the cash discount/.test(q)) return 'na';
+    if (/labeled the account (a )?self[- ]?pay|formal or informal agreements? regarding payment/.test(q)) return 'no_knowledge';
     // What only the provider's office or the patient knows: insurance details, Letters of Protection, contracts and
     // negotiated rates, Medicare cost reports and rates, the patient's own doctors and pharmacies.
     if (/insurance (company )?information|insurance compan(y|ies) (were|was) identified|letter(s|\(s\))? of protection|financial interest in (this|the) (lawsuit|suit|case)|negotiated (or reduced )?rates|reduced rates|contracts? regarding|cost reports?|reimbursement rates?|primary care (physician|doctor)|pharmac(y|ies)/.test(q)) return 'no_knowledge';
