@@ -1824,7 +1824,7 @@
     }
 
     if (opts.standard) {
-      const sp = drawStandard(out, font, bold, safe, opts.standard, form ? (page, f) => { try { addField(page, f, '', 10); } catch (e) { console.error(e); } } : null);
+      const sp = drawStandard(out, font, bold, safe, opts.standard, form ? (page, f, v) => { try { addField(page, f, safe(v || ''), f.size || 10); } catch (e) { console.error(e); } } : null);
       const at = Math.min(opts.standard.insertAt ?? 0, out.getPageCount());
       out.insertPage(at, sp);
     }
@@ -1891,7 +1891,25 @@
     y -= 12;
     page.drawText(safe(st.data.title || 'Custodian of Records'), { x: 324, y, size: 10, font });
     y -= 30;
-    para(t.sworn, 11, 36, 10);
+    if (field) {
+      // "SWORN TO AND SUBSCRIBED before me on the [day] day of ⏎ [month], 20[yy]." — the date parts are editable fields
+      const S = 11, d = st.data, sd = d.swornDate || new Date();
+      const say = (s, x) => { s = safe(s); page.drawText(s, { x, y, size: S, font, color: rgb(0, 0, 0) }); return x + font.widthOfTextAtSize(s, S); };
+      const blank = (x, w, name, v, align) => {
+        page.drawLine({ start: { x, y: y - 2 }, end: { x: x + w, y: y - 2 }, thickness: 0.5 });
+        field(page, { name, x, y: y - 2, w, h: 12, align, size: S }, d.fillSworn ? v : '');
+        return x + w;
+      };
+      let x = say('SWORN TO AND SUBSCRIBED before me on the ', L + 36);
+      x = blank(x, 45, 'notary_day', AE.ordinal(sd.getDate()), 'center');
+      say(' day of', x);
+      y -= S + 8;
+      x = blank(L, 120, 'notary_month', MONTHS[sd.getMonth()], 'left');
+      x = say(', 20', x);
+      x = blank(x, 24, 'notary_year2', String(sd.getFullYear()).slice(2), 'center');
+      say('.', x);
+      y -= S + 14;
+    } else para(t.sworn, 11, 36, 10);
     y -= 20;
     page.drawLine({ start: { x: 324, y }, end: { x: R, y }, thickness: 0.7 });
     if (field) field(page, { name: 'notary_sig', x: 324, y, w: R - 324, h: 12 });
