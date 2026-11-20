@@ -41,6 +41,16 @@
   }
 
   function applyAccess() {
+    // Itemized Billing page: a billing tool — the PDF needs billing access.
+    if ($('#btn-download') && !document.querySelector('input[name=type]')) {
+      if (!has('billing')) {
+        document.addEventListener('click', e => {
+          if (!e.target.closest('#btn-download')) return;
+          e.preventDefault(); e.stopImmediatePropagation(); notice('Your account cannot create billing documents.');
+        }, true);
+      }
+      return;
+    }
     // Records / billing: only the allowed type can be chosen.
     const radios = [...document.querySelectorAll('input[name=type]')];
     for (const r of radios) {

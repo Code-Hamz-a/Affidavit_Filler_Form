@@ -113,6 +113,17 @@ Instead of steps 1–4 above, use cPanel's **Setup Node.js App** (CloudLinux + P
 Recovery commands (`src/cli.js`) are run from cPanel → **Terminal**, after entering the app's environment with the command shown at the top of its Setup Node.js App page.
 
 ## Updates
+**cPanel (Setup Node.js App):**
+1. On your computer, make the upload file from the repository: `git archive --format=zip -o affidavit-upload.zip HEAD -- "Affidavit Filler.html" "Itemized Billing.html" js lib server`.
+2. cPanel → **File Manager** → open the app folder (the one that holds `server/`) → **Upload** `affidavit-upload.zip`.
+3. Select the zip → **Extract** into the same folder, overwriting the old files. The database in `DATA_DIR` is outside this folder and is not touched.
+4. Delete the zip.
+5. **Setup Node.js App** → the app → **Run NPM Install** → **Restart**.
+6. Open the site, sign in, press Ctrl+F5 once, and check the version shown at the top right of the tool.
+
+The tool pages are `/app/` (Affidavit Filler) and `/app/Itemized%20Billing.html` (Itemized Billing); both need a signed-in user.
+
+**Own server (systemd):**
 ```bash
 cd /opt/affidavit/app && sudo -u affidavit git pull
 cd server && sudo -u affidavit npm ci --omit=dev && sudo systemctl restart affidavit

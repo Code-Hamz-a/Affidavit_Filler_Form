@@ -164,22 +164,25 @@ app.get('/twostep', needStage('twostep_setup', 'full'), sendPage('twostep'));
 app.get('/change-password', needStage('password_change', 'full'), sendPage('change-password'));
 app.get('/admin', needStage('full'), (req, res, next) => req.user.role === 'admin' ? next() : res.redirect(303, '/app/'), sendPage('admin'));
 
-// The tool, with the sign-in bar and access rules added.
-let toolCache = { mtime: 0, html: '' };
-function toolHtml() {
-  const file = path.join(TOOL_DIR, 'Affidavit Filler.html');
+// The tool pages (Affidavit Filler, Itemized Billing), with the sign-in bar and access rules added.
+const toolCache = new Map(); // file name -> { mtime, html }
+function toolHtml(name = 'Affidavit Filler.html') {
+  const file = path.join(TOOL_DIR, name);
   const { mtimeMs } = fs.statSync(file);
-  if (mtimeMs !== toolCache.mtime) {
-    const html = fs.readFileSync(file, 'utf8')
-      .replace('</head>', '<link rel="stylesheet" href="/assets/tool.css">\n</head>')
-      .replace('</body>', '<script src="/assets/tool-guard.js"></script>\n</body>');
-    toolCache = { mtime: mtimeMs, html };
-  }
-  return toolCache.html;
+  const hit = toolCache.get(name);
+  if (hit && hit.mtime === mtimeMs) return hit.html;
+  const html = fs.readFileSync(file, 'utf8')
+    .replace('</head>', '<link rel="stylesheet" href="/assets/tool.css">\n</head>')
+    .replace('</body>', '<script src="/assets/tool-guard.js"></script>\n</body>');
+  toolCache.set(name, { mtime: mtimeMs, html });
+  return html;
 }
 // "/app" and "/app/" are the same route to Express; only the one without the slash is sent on (the tool's links are relative).
 app.get('/app', (req, res, next) => req.originalUrl.split('?')[0] === '/app' ? res.redirect(301, '/app/') : next());
 app.get('/app/', needStage('full'), (req, res) => { res.set('Cache-Control', 'no-store').type('html').send(toolHtml()); });
+// The pages link to each other by file name ("Itemized Billing.html", "Affidavit Filler.html").
+app.get(/^\/app\/Itemized(%20| )Billing\.html$/, needStage('full'), (req, res) => { res.set('Cache-Control', 'no-store').type('html').send(toolHtml('Itemized Billing.html')); });
+app.get(/^\/app\/Affidavit(%20| )Filler\.html$/, (req, res) => res.redirect(302, '/app/'));
 for (const dir of ['js', 'lib']) {
   app.use(`/app/${dir}`, needStage('full'), express.static(path.join(TOOL_DIR, dir), { index: false, dotfiles: 'deny' }));
 }
