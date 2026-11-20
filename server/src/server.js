@@ -190,7 +190,7 @@ app.get(/^\/app\/Affidavit(%20| )Filler\.html$/, (req, res) => res.redirect(302,
 // ------------------------------------------------------------ DocuSign: send the finished affidavit for e-signature
 // The custodian signs first, then the notary. The PDF passes through to DocuSign and is not kept on this server.
 const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/;
-app.get('/api/docusign/status', needStage('full'), (req, res) => res.json({ configured: docusignConfigured(), demo: docusignDemo() }));
+app.get('/api/docusign/status', needStage('full'), (req, res) => res.json({ configured: docusignConfigured(), demo: docusignDemo(), me: req.user.email }));
 app.post('/api/docusign/send', needStage('full'), express.json({ limit: '40mb' }), async (req, res) => {
   if (!docusignConfigured()) return fail(res, 503, 'DocuSign is not set up on this server yet.');
   const b = req.body || {}, acc = accessOf(req.user);
@@ -209,6 +209,7 @@ app.post('/api/docusign/send', needStage('full'), express.json({ limit: '40mb' }
   if (!allow('docusign:' + req.user.id, 60, 60 * MIN)) return fail(res, 429, 'Too many envelopes in the last hour. Wait a while.');
   try {
     const r = await sendEnvelope({ pdfBase64: b.pdfBase64, name: str(b.name, 100), subject: str(b.subject, 100), custodian, notary,
+      cc: b.ccMe ? { name: req.user.name, email: req.user.email } : null,
       tabs: Array.isArray(b.tabs) ? b.tabs.slice(0, 200) : [] }, `${req.protocol}://${req.get('host')}`);
     audit('docusign', `${req.user.name} sent an affidavit to DocuSign (envelope ${r.envelopeId})`, req.user.email, ipOf(req));
     res.json(r);

@@ -90,7 +90,9 @@ export async function sendEnvelope(doc, origin) {
       signers: [
         { recipientId: '1', routingOrder: '1', name: cleanText(doc.custodian.name), email: cleanText(doc.custodian.email, 254), roleName: 'Custodian', tabs: tabsFor('custodian') },
         { recipientId: '2', routingOrder: '2', name: cleanText(doc.notary.name), email: cleanText(doc.notary.email, 254), roleName: 'Notary', tabs: tabsFor('notary') }
-      ]
+      ],
+      // the person who sent it gets the finished, signed copy by email
+      ...(doc.cc && doc.cc.email ? { carbonCopies: [{ recipientId: '3', routingOrder: '3', name: cleanText(doc.cc.name), email: cleanText(doc.cc.email, 254) }] } : {})
     },
     status: 'sent'
   };

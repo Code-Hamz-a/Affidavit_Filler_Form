@@ -144,7 +144,7 @@ The button appears in the tool only when these settings are on the server. The P
    - Production (after DocuSign's Go-Live review): `DOCUSIGN_BASE_PATH` = the account's **Account Base URI** + `/restapi`, `DOCUSIGN_OAUTH_HOST=account.docusign.com`
    - → **Save** → **Restart**.
 4. In the tool, press **Send with DocuSign…** once. The first time it shows a DocuSign permission link: open it while signed in to DocuSign as the user of step 1, press **Allow**, then send again. This is needed once (and again after switching to production).
-5. Each envelope: the custodian signs first (affiant line), then the notary (notary signature line, plus text boxes for anything the tool left empty: date, printed name, commission). The activity log records "sent an affidavit to DocuSign (envelope …)" — no patient name. The email subject and document name carry only the request number.
+5. Each envelope: the custodian signs first (affiant line), then the notary (notary signature line, plus text boxes for anything the tool left empty: date, printed name, commission). The activity log records "sent an affidavit to DocuSign (envelope …)" — no patient name. The email subject and document name carry only the request number. The signed-in user can be added as a copy (CC) recipient, so the finished, signed PDF is emailed to them too.
 
 ## Backups
 Back up `/opt/affidavit/data`, which holds the database and, if `SECRET_KEY` is not set, `secret.key`. Keep `SECRET_KEY` separately.

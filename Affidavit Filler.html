@@ -137,6 +137,10 @@
   .ds-body { padding: 14px 18px 18px; overflow: auto; }
   .ds-btn { margin-top: 8px; width: 100%; background: #fff; border: 1.5px solid #4c2bd0; color: #4c2bd0; }
   .ds-btn:hover { background: #f3f0ff; }
+  /* when DocuSign is set up, sending is the main action and the download the backup */
+  .ds-main #btn-docusign { margin-top: 0; background: #4c2bd0; border-color: #4c2bd0; color: #fff; }
+  .ds-main #btn-docusign:hover { background: #3d1fb8; }
+  .ds-main #btn-generate { margin-top: 8px; background: #fff; color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
   .modal-box { background: var(--card); border-radius: 10px; width: min(1000px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
   .modal-head { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
   .pg-grid { overflow: auto; padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
@@ -182,7 +186,7 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v3.61 · 21 Nov 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v3.62 · 21 Nov 2026 · <b id="app-ready">Loading…</b></span>
   <a href="Itemized Billing.html" class="nav" title="CareCapital Billing Summary from a UB-04 / CMS-1500">Itemized Billing ↗</a>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
@@ -412,6 +416,8 @@
         <div><label>Name</label><input type="text" id="ds-not-name" autocomplete="off"></div>
         <div><label>Email</label><input type="email" id="ds-not-email" autocomplete="off"></div>
       </div>
+      <label class="check-line"><input type="checkbox" id="ds-cc" checked> Email me the signed copy too (<span id="ds-me">your sign-in email</span>)</label>
+      <div class="hint">When both have signed, DocuSign emails the finished, signed PDF to the custodian, the notary and — with this ticked — to you.</div>
       <div id="ds-msg" class="msgs" style="margin-top:12px"></div>
       <div class="row" style="margin-top:12px; justify-content:flex-end"><button class="primary big" id="ds-send">Send for signature</button></div>
     </div>
@@ -444,9 +450,9 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/facility-directory.js?v=3.61"></script>
-<script src="js/engine.js?v=3.61"></script>
-<script src="js/ocr.js?v=3.61"></script>
-<script src="js/app.js?v=3.61"></script>
+<script src="js/facility-directory.js?v=3.62"></script>
+<script src="js/engine.js?v=3.62"></script>
+<script src="js/ocr.js?v=3.62"></script>
+<script src="js/app.js?v=3.62"></script>
 </body>
 </html>

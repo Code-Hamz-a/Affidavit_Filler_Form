@@ -1578,7 +1578,14 @@
   // The server holds the DocuSign keys; the button shows only when it says DocuSign is set up.
   if (/^https?:$/.test(location.protocol)) fetch('/api/docusign/status', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(st => {
     if (!st || !st.configured) return;
-    $('#btn-docusign').hidden = false;
+    // sending for signature becomes the main button; downloading stays below it
+    const gen = $('#btn-generate'), ds = $('#btn-docusign');
+    gen.parentNode.insertBefore(ds, gen);
+    gen.parentNode.classList.add('ds-main');
+    gen.textContent = 'Download PDF instead';
+    ds.textContent = 'Fill & send for signature (DocuSign)…';
+    ds.hidden = false;
+    if (st.me) $('#ds-me').textContent = st.me;
     $('#ds-mode').textContent = st.demo ? '· DocuSign sandbox (test) account — not legally binding' : '';
   }).catch(() => { /* offline file: no server, no DocuSign */ });
   const DS_FIELDS = { 'ds-cust-name': 'dsCustName', 'ds-cust-email': 'dsCustEmail', 'ds-not-name': 'dsNotName', 'ds-not-email': 'dsNotEmail' };
@@ -1586,6 +1593,7 @@
     if (!readyForPdf()) return;
     for (const [id, key] of Object.entries(DS_FIELDS)) $('#' + id).value = settings[key] || (id === 'ds-cust-name' ? caseData().custodian || '' : '');
     $('#ds-msg').innerHTML = ''; $('#ds-send').disabled = false;
+    $('#ds-cc').checked = settings.dsCc !== false;
     $('#ds-modal').hidden = false;
     $('#ds-cust-email').focus();
   });
@@ -1604,6 +1612,7 @@
     if (!ok(custodian)) return dsMsg('err', 'Enter the custodian’s name and a valid email.');
     if (!ok(notary)) return dsMsg('err', 'Enter the notary’s name and a valid email.');
     for (const [id, key] of Object.entries(DS_FIELDS)) settings[key] = val(id);
+    settings.dsCc = $('#ds-cc').checked;
     saveSettings();
     $('#ds-send').disabled = true;
     dsMsg('info', 'Creating the PDF…');
@@ -1618,7 +1627,7 @@
         // no patient name in the email subject or document name
         body: JSON.stringify({
           pdfBase64: toBase64(bytes), name: `Affidavit${reqId ? ' ' + reqId : ''}.pdf`, subject: `Please sign: affidavit${reqId ? ' – request ' + reqId : ''}`,
-          type: type(), subpoena: /Subpoena \/ DWQ/.test($('#req-info').textContent || ''), custodian, notary, tabs
+          type: type(), subpoena: /Subpoena \/ DWQ/.test($('#req-info').textContent || ''), custodian, notary, tabs, ccMe: $('#ds-cc').checked
         })
       });
       const j = await r.json().catch(() => ({}));
@@ -1627,7 +1636,8 @@
         return dsMsg('warn', `${escHtml(j.error)} An admin opens <a href="${escHtml(j.consent)}" target="_blank" rel="noopener">this DocuSign page</a> once, presses <b>Allow</b>, then sends again.`);
       }
       if (!r.ok) throw new Error(j.error || `DocuSign send failed (${r.status})`);
-      dsMsg('ok', `Sent. The custodian (${escHtml(custodian.email)}) gets the email first, then the notary (${escHtml(notary.email)}). Envelope ID: <b>${escHtml(j.envelopeId || '')}</b>.` +
+      dsMsg('ok', `Sent. The custodian (${escHtml(custodian.email)}) gets the email first, then the notary (${escHtml(notary.email)}).` +
+        ($('#ds-cc').checked ? ' The signed copy will be emailed to you as well.' : '') + ` Envelope ID: <b>${escHtml(j.envelopeId || '')}</b>.` +
         (tabs.some(t => t.type === 'sign') ? '' : ' No signature line was found, so DocuSign lets them place their signature themselves.'));
       $('#out-info').textContent = `Sent to DocuSign · envelope ${j.envelopeId || ''}`;
     } catch (e) {
