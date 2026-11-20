@@ -150,6 +150,7 @@
   .pg-view.cut canvas { opacity: .3; }
   .pg-view.cut #pv-label { color: var(--err); font-weight: 700; }
   .subhead { font-size: 13px; margin: 14px 0 6px; }
+  .check-line { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 13px; }
   .sig-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   .sig-box { width: 220px; height: 64px; border: 1px dashed #b9c0cc; border-radius: 6px; background: #fff; display: flex; align-items: center; justify-content: center; }
   .sig-box img { max-width: 210px; max-height: 56px; }
@@ -175,7 +176,7 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v3.57 · 20 Nov 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v3.58 · 20 Nov 2026 · <b id="app-ready">Loading…</b></span>
   <a href="Itemized Billing.html" class="nav" title="CareCapital Billing Summary from a UB-04 / CMS-1500">Itemized Billing ↗</a>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
@@ -193,6 +194,8 @@
           <div><label>State</label><input type="text" id="s-state"></div>
         </div>
         <div class="hint">Used for every facility unless the facility below has its own custodian or county.</div>
+        <label class="check-line"><input type="checkbox" id="s-editable"> Keep every filled value editable in the downloaded PDF</label>
+        <div class="hint">Off (recommended): the values are printed sharp on the page, and only the notary's parts (signature lines, sworn date, State, printed name, commission) stay editable. On: every value is an editable field — some viewers (Chrome, Edge) then show them lighter and less sharp.</div>
         <h3 class="subhead">Signature (optional)</h3>
         <div class="sig-row">
           <div class="sig-box"><img id="sig-img" alt="Signature" hidden><span id="sig-none" class="muted">No signature</span></div>
@@ -414,9 +417,9 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/facility-directory.js?v=3.57"></script>
-<script src="js/engine.js?v=3.57"></script>
-<script src="js/ocr.js?v=3.57"></script>
-<script src="js/app.js?v=3.57"></script>
+<script src="js/facility-directory.js?v=3.58"></script>
+<script src="js/engine.js?v=3.58"></script>
+<script src="js/ocr.js?v=3.58"></script>
+<script src="js/app.js?v=3.58"></script>
 </body>
 </html>

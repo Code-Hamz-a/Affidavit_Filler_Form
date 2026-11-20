@@ -176,6 +176,8 @@
   // Where a picture sits on this blank: moved here for this request, else the spot remembered from the last move.
   const slotPlace = (b, slot) => (b.place && b.place[slot.p]) || (slot.remember && settings[slot.remember]) || null;
   const blankPlace = b => { const o = {}; for (const slot of SIG_SLOTS) { const pl = slotPlace(b, slot); if (pl) o[slot.p] = pl; } return Object.keys(o).length ? o : null; };
+  $('#s-editable').checked = !!settings.editableAll;
+  $('#s-editable').addEventListener('change', e => { settings.editableAll = e.target.checked; saveSettings(); });
   const sigActive = slot => !!(settings[slot.url] && settings[slot.use] !== false);
   function showSignature() {
     for (const slot of SIG_SLOTS) {
@@ -1407,12 +1409,13 @@
     try {
       const d = caseData();
       const billing = type() === 'billing';
-      // Every filled blank, and the empty signature / notary blanks, go out as editable form fields.
+      // The notary's blanks (filled or not) go out as editable form fields; the other values are printed sharp on the page,
+      // unless "Keep every filled value editable" is on.
       const NOTARY = /^(signature|notary_sig|notary_name|commission|notary_(day|month|year2|year4|date)|state)$/;
       const fills = [...S.blanks.filter(b => b.include || (NOTARY.test(b.kind) && !b.prefilled)), ...S.customs].filter(b => S.affPages.has(b.page)).map(b => b.user
         ? { page: b.page, x: b.x, y: b.y, free: true, size: b.size, color: hexRgb(b.color), value: b.override || '' }
         : {
-          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null, field: true, name: b.kind, sig: b.kind === 'signature' ? 'affiant' : b.kind === 'notary_sig' ? 'notary' : null, place: blankPlace(b),
+          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null, field: !!settings.editableAll || NOTARY.test(b.kind), name: b.kind, sig: b.kind === 'signature' ? 'affiant' : b.kind === 'notary_sig' ? 'notary' : null, place: blankPlace(b),
           value: b.include ? shownValue(b) : '',
           align: /^(pages|notary_day|notary_year2|notary_year4)$/.test(b.kind) ? 'center' : 'left'
         });
