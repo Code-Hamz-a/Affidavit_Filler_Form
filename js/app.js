@@ -134,7 +134,7 @@
   });
   // Export / import settings so colleagues get the same facilities and subpoena answers (no patient data inside).
   $('#set-export').addEventListener('click', () => {
-    const { signature, sigW, sigH, notarySig, nsigW, nsigH, ...shared } = settings; // signatures never leave this browser
+    const { signature, sigW, sigH, notarySig, nsigW, nsigH, notaryStamp, stampW, stampH, ...shared } = settings; // signatures / stamp never leave this browser
     const blob = new Blob([JSON.stringify({ app: 'Affidavit Filler', exported: new Date().toISOString(), settings: shared }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'Affidavit Filler settings.json';
@@ -171,6 +171,7 @@
   const SIG_SLOTS = [
     { p: 'sig', url: 'signature', w: 'sigW', h: 'sigH', use: 'sigUse', kind: 'signature', what: 'signature' },
     { p: 'nsig', url: 'notarySig', w: 'nsigW', h: 'nsigH', use: 'nsigUse', kind: 'notary_sig', what: 'notary signature' },
+    { p: 'stamp', url: 'notaryStamp', w: 'stampW', h: 'stampH', use: 'stampUse', kind: 'notary_sig', what: 'notary stamp', stamp: true },
   ];
   const sigActive = slot => !!(settings[slot.url] && settings[slot.use] !== false);
   function showSignature() {
@@ -1112,11 +1113,11 @@
   function renderOverlays() {
     $$('.ov, .sig-ov').forEach(o => o.remove());
     // the signature pictures on the affiant / notary signature lines (as they will be in the PDF)
-    for (const b of S.blanks) {
-      const slot = SIG_SLOTS.find(x => x.kind === b.kind), pv = pageViews.get(b.page);
-      if (!slot || !sigActive(slot) || !pv || b.prefilled || !S.affPages.has(b.page) || (b.override || '').trim()) continue;
+    for (const b of S.blanks) for (const slot of SIG_SLOTS) {
+      const pv = pageViews.get(b.page);
+      if (slot.kind !== b.kind || !sigActive(slot) || !pv || b.prefilled || !S.affPages.has(b.page) || (!slot.stamp && (b.override || '').trim())) continue;
       const img = document.createElement('img'); img.className = 'sig-ov'; img.src = settings[slot.url]; img.alt = '';
-      const r = AE.signatureBox(b, settings[slot.w] || 0, settings[slot.h] || 0);
+      const r = (slot.stamp ? AE.stampBox : AE.signatureBox)(b, settings[slot.w] || 0, settings[slot.h] || 0);
       const p1 = pv.vp.convertToViewportPoint(r.x, r.y + r.h), p2 = pv.vp.convertToViewportPoint(r.x + r.w, r.y);
       Object.assign(img.style, { left: Math.min(p1[0], p2[0]) + 'px', top: Math.min(p1[1], p2[1]) + 'px', width: Math.abs(p2[0] - p1[0]) + 'px', height: Math.abs(p2[1] - p1[1]) + 'px' });
       pv.wrap.appendChild(img);
@@ -1384,7 +1385,7 @@
       const whiteouts = S.req ? S.req.pages.filter(p => filledPages.has(p.num)).flatMap(p => (p.whiteouts || []).map(w => ({ ...w, page: p.num }))) : [];
       const png = slot => sigActive(slot) ? { png: dataUrlBytes(settings[slot.url]) } : null;
       const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, ink, attachments, standard, whiteouts,
-        signature: png(SIG_SLOTS[0]), notarySignature: png(SIG_SLOTS[1]) });
+        signature: png(SIG_SLOTS[0]), notarySignature: png(SIG_SLOTS[1]), notaryStamp: png(SIG_SLOTS[2]) });
       let name = val('f-filename') || AE.fileName(d.patient, type(), null, val('f-reqid'), val('f-facility'));
       if (!/\.pdf$/i.test(name)) name += '.pdf';
       name = name.replace(/[\\/:*?"<>|]+/g, '');

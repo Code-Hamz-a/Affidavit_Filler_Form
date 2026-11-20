@@ -1746,6 +1746,13 @@
     return { x: f.x + 4, y: f.y + 0.5, w, h };
   };
 
+  // Where a notary stamp / seal goes: to the left of the notary's signature line (top just above it), at most 170 × 70pt.
+  AE.stampBox = function (f, iw, ih) {
+    const k = iw && ih ? Math.min(170 / iw, 70 / ih) : 0;
+    const w = k ? iw * k : 150, h = k ? ih * k : 60;
+    return { x: Math.max(24, f.x - w - 14), y: Math.max(18, f.y + 10 - h), w, h }; // hangs down beside the notary block
+  };
+
   AE.buildPdf = async function (opts) {
     const { PDFDocument, rgb } = AE.PDFLib;
     let out;
@@ -1781,6 +1788,8 @@
     // the user's signature pictures (PNG): the affiant's on the affiant signature lines, the notary's on the notary line
     const embedSig = async o => { if (!o || !o.png) return null; try { return await out.embedPng(o.png); } catch (e) { console.error(e); return null; } };
     const sigImgs = { affiant: await embedSig(opts.signature), notary: await embedSig(opts.notarySignature) };
+    const stampImg = await embedSig(opts.notaryStamp);
+    const drawStamp = (page, f) => { const r = AE.stampBox(f, stampImg.width, stampImg.height); page.drawImage(stampImg, { x: r.x, y: r.y, width: r.w, height: r.h }); };
     const drawSig = (page, f, img) => { const r = AE.signatureBox(f, img.width, img.height); page.drawImage(img, { x: r.x, y: r.y, width: r.w, height: r.h }); };
     const sigFor = name => name === 'signature' ? sigImgs.affiant : name === 'notary_sig' ? sigImgs.notary : null;
     const addField = (page, f, v, size) => {
@@ -1807,6 +1816,7 @@
       const page = pages[f.page - 1];
       if (!page) continue;
       if (f.field && keepSet && !keepSet.has(f.page)) continue;
+      if (f.sig === 'notary' && stampImg) drawStamp(page, f);
       if (f.sig && sigImgs[f.sig] && !v) { drawSig(page, f, sigImgs[f.sig]); continue; }
       if (f.cover && v) {
         // White out a wrong value that was already written on the blank — stop above the underline.
@@ -1840,6 +1850,7 @@
 
     if (opts.standard) {
       const sp = drawStandard(out, font, bold, safe, opts.standard, (page, f, v) => {
+        if (f.name === 'notary_sig' && stampImg) drawStamp(page, f);
         if (sigFor(f.name)) return drawSig(page, f, sigFor(f.name));
         if (form) try { return addField(page, f, safe(v || ''), f.size || 10); } catch (e) { console.error(e); }
         if (v) page.drawText(safe(v), { x: f.x + 2, y: f.y + 1.5, size: f.size || 10, font, color: rgb(0, 0, 0) }); // no form possible: plain text

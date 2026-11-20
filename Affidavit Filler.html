@@ -171,7 +171,7 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v3.53 · 20 Nov 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v3.54 · 20 Nov 2026 · <b id="app-ready">Loading…</b></span>
   <a href="Itemized Billing.html" class="nav" title="CareCapital Billing Summary from a UB-04 / CMS-1500">Itemized Billing ↗</a>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
@@ -207,7 +207,16 @@
             <label id="nsig-use-l" hidden><input type="checkbox" id="nsig-use" checked> Sign the notary line with it</label>
           </div>
         </div>
-        <div class="hint">A photo or scan of a signature on white paper (PNG or JPG). The white background is removed automatically. The signature goes on the affiant's signature line, the notary signature on the notary's signature line. Both stay only in this browser and are never exported with the settings.</div>
+        <h3 class="subhead">Notary stamp / seal (optional)</h3>
+        <div class="sig-row">
+          <div class="sig-box"><img id="stamp-img" alt="Notary stamp" hidden><span id="stamp-none" class="muted">No notary stamp</span></div>
+          <div class="sig-actions">
+            <label class="btn-like"><input type="file" id="in-stamp" accept="image/png,image/jpeg,image/webp" hidden>Upload notary stamp…</label>
+            <button type="button" id="stamp-del" hidden>Remove</button>
+            <label id="stamp-use-l" hidden><input type="checkbox" id="stamp-use" checked> Stamp the notary block with it</label>
+          </div>
+        </div>
+        <div class="hint">Photos or scans on white paper (PNG or JPG); the white background is removed automatically. The signature goes on the affiant's signature line, the notary signature on the notary's signature line, and the stamp to the left of the notary's signature line. All stay only in this browser and are never exported with the settings.</div>
         <h3 class="subhead">Standard subpoena answers</h3>
         <div class="grid">
           <div class="full"><label>Default business address &amp; phone (used only when the selected facility has no address)</label><input type="text" id="s-address"></div>
@@ -401,9 +410,9 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/facility-directory.js?v=3.53"></script>
-<script src="js/engine.js?v=3.53"></script>
-<script src="js/ocr.js?v=3.53"></script>
-<script src="js/app.js?v=3.53"></script>
+<script src="js/facility-directory.js?v=3.54"></script>
+<script src="js/engine.js?v=3.54"></script>
+<script src="js/ocr.js?v=3.54"></script>
+<script src="js/app.js?v=3.54"></script>
 </body>
 </html>
