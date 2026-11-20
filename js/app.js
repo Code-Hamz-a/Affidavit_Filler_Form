@@ -134,7 +134,7 @@
   });
   // Export / import settings so colleagues get the same facilities and subpoena answers (no patient data inside).
   $('#set-export').addEventListener('click', () => {
-    const { signature, sigW, sigH, notarySig, nsigW, nsigH, notaryStamp, stampW, stampH, stampPlace, ...shared } = settings; // signatures / stamp never leave this browser
+    const { signature, sigW, sigH, notarySig, nsigW, nsigH, notaryStamp, stampW, stampH, stampPlace, sigPlace, nsigPlace, ...shared } = settings; // signatures / stamp never leave this browser
     const blob = new Blob([JSON.stringify({ app: 'Affidavit Filler', exported: new Date().toISOString(), settings: shared }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'Affidavit Filler settings.json';
@@ -169,11 +169,11 @@
   // Two slots: the affiant's signature and the notary's. Each upload is cut to the ink, its white paper made
   // transparent, and kept (as a PNG) in this browser only.
   const SIG_SLOTS = [
-    { p: 'sig', url: 'signature', w: 'sigW', h: 'sigH', use: 'sigUse', kind: 'signature', what: 'signature' },
-    { p: 'nsig', url: 'notarySig', w: 'nsigW', h: 'nsigH', use: 'nsigUse', kind: 'notary_sig', what: 'notary signature' },
+    { p: 'sig', url: 'signature', w: 'sigW', h: 'sigH', use: 'sigUse', kind: 'signature', what: 'signature', remember: 'sigPlace' },
+    { p: 'nsig', url: 'notarySig', w: 'nsigW', h: 'nsigH', use: 'nsigUse', kind: 'notary_sig', what: 'notary signature', remember: 'nsigPlace' },
     { p: 'stamp', url: 'notaryStamp', w: 'stampW', h: 'stampH', use: 'stampUse', kind: 'notary_sig', what: 'notary stamp', stamp: true, remember: 'stampPlace' },
   ];
-  // Where a picture sits on this blank: moved here for this request, else the spot remembered from the last move (stamp).
+  // Where a picture sits on this blank: moved here for this request, else the spot remembered from the last move.
   const slotPlace = (b, slot) => (b.place && b.place[slot.p]) || (slot.remember && settings[slot.remember]) || null;
   const blankPlace = b => { const o = {}; for (const slot of SIG_SLOTS) { const pl = slotPlace(b, slot); if (pl) o[slot.p] = pl; } return Object.keys(o).length ? o : null; };
   const sigActive = slot => !!(settings[slot.url] && settings[slot.use] !== false);
@@ -1149,7 +1149,7 @@
         };
         const up = () => {
           box.classList.remove('drag'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
-          // the stamp's spot is remembered for the next requests too
+          // the spot is remembered for the next requests too
           if (slot.remember && b.place && b.place[slot.p]) { settings[slot.remember] = b.place[slot.p]; saveSettings(); }
         };
         window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
