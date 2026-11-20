@@ -129,6 +129,23 @@ cd /opt/affidavit/app && sudo -u affidavit git pull
 cd server && sudo -u affidavit npm ci --omit=dev && sudo systemctl restart affidavit
 ```
 
+## DocuSign (optional: "Send with DocuSign")
+The button appears in the tool only when these settings are on the server. The PDF goes from the browser through the server to DocuSign and is not kept on the server. **Patient records go to DocuSign: sign a BAA with DocuSign before sending real patient files.**
+1. DocuSign → **Settings → Apps and Keys** (start with a developer/sandbox account):
+   - Note the **User ID** and **API Account ID** shown at the top.
+   - **Add App and Integration Key** → note the **Integration Key**.
+   - In the app: **Generate RSA** → copy the **private key** (keep it secret; it is shown only once).
+   - **Additional settings → Redirect URIs → Add**: `https://affidavit.twgdashbards.online/` → **Save**.
+2. On the server, put the private key in a file **outside** the app folder, e.g. `/home/USER/affidavit-data/docusign-private.key` (cPanel File Manager → New File → paste → Save).
+3. Setup Node.js App → the app → **Environment variables** → add:
+   - `DOCUSIGN_INTEGRATION_KEY`, `DOCUSIGN_USER_ID`, `DOCUSIGN_ACCOUNT_ID`
+   - `DOCUSIGN_PRIVATE_KEY_FILE` = the file from step 2
+   - Sandbox: `DOCUSIGN_BASE_PATH=https://demo.docusign.net/restapi`, `DOCUSIGN_OAUTH_HOST=account-d.docusign.com`
+   - Production (after DocuSign's Go-Live review): `DOCUSIGN_BASE_PATH` = the account's **Account Base URI** + `/restapi`, `DOCUSIGN_OAUTH_HOST=account.docusign.com`
+   - → **Save** → **Restart**.
+4. In the tool, press **Send with DocuSign…** once. The first time it shows a DocuSign permission link: open it while signed in to DocuSign as the user of step 1, press **Allow**, then send again. This is needed once (and again after switching to production).
+5. Each envelope: the custodian signs first (affiant line), then the notary (notary signature line, plus text boxes for anything the tool left empty: date, printed name, commission). The activity log records "sent an affidavit to DocuSign (envelope …)" — no patient name. The email subject and document name carry only the request number.
+
 ## Backups
 Back up `/opt/affidavit/data`, which holds the database and, if `SECRET_KEY` is not set, `secret.key`. Keep `SECRET_KEY` separately.
 

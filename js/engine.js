@@ -1760,6 +1760,10 @@
     return { x: r.x + (pl.dx || 0), y: r.y + (pl.dy || 0), w: r.w * s, h: r.h * s };
   };
 
+  // DocuSign "Sign here" / text boxes for a blank: who fills it and what kind of box (see AE.buildPdf opts.tabs).
+  const TAB_ROLES = { signature: ['custodian', 'sign'], notary_sig: ['notary', 'sign'], notary_name: ['notary', 'text'], commission: ['notary', 'text'],
+    notary_day: ['notary', 'text'], notary_month: ['notary', 'text'], notary_year2: ['notary', 'text'], notary_year4: ['notary', 'text'], notary_date: ['notary', 'text'] };
+
   AE.buildPdf = async function (opts) {
     const { PDFDocument, rgb } = AE.PDFLib;
     let out;
@@ -1797,6 +1801,14 @@
     const sigImgs = { affiant: await embedSig(opts.signature), notary: await embedSig(opts.notarySignature) };
     const stampImg = await embedSig(opts.notaryStamp);
     const placeOf = (f, k) => f.place && f.place[k];
+    // where the custodian / notary sign or type in DocuSign (only blanks the tool left empty get a text box)
+    const pendingTabs = [];
+    const addTab = (page, f, v) => {
+      const rt = TAB_ROLES[f.name];
+      if (!rt || (rt[1] === 'text' && v)) return;
+      if (rt[1] === 'sign') pendingTabs.push({ page, role: rt[0], type: 'sign', label: f.name, x: f.x + 4, top: f.y + 30, w: 0 });
+      else pendingTabs.push({ page, role: rt[0], type: 'text', label: f.name, x: f.x + 2, top: f.y + 11, w: Math.max(24, (f.w || 80) - 4) });
+    };
     const drawStamp = (page, f) => { const r = AE.placeBox(AE.stampBox(f, stampImg.width, stampImg.height), placeOf(f, 'stamp')); page.drawImage(stampImg, { x: r.x, y: r.y, width: r.w, height: r.h }); };
     const drawSig = (page, f, img) => {
       const r = AE.placeBox(AE.signatureBox(f, img.width, img.height), placeOf(f, img === sigImgs.notary ? 'nsig' : 'sig'));
@@ -1827,6 +1839,7 @@
       const page = pages[f.page - 1];
       if (!page) continue;
       if (f.field && keepSet && !keepSet.has(f.page)) continue;
+      if (opts.tabs) addTab(page, f, v);
       if (f.sig === 'notary' && stampImg) drawStamp(page, f);
       if (f.sig && sigImgs[f.sig] && !v) { drawSig(page, f, sigImgs[f.sig]); continue; }
       if (f.cover && v) {
@@ -1867,6 +1880,7 @@
 
     if (opts.standard) {
       const sp = drawStandard(out, font, bold, safe, opts.standard, (page, f, v) => {
+        if (opts.tabs) addTab(page, f, v);
         if (f.name === 'notary_sig' && stampImg) drawStamp(page, f);
         if (sigFor(f.name)) return drawSig(page, f, sigFor(f.name));
         if (form) try { return addField(page, f, safe(v || ''), f.size || 10); } catch (e) { console.error(e); }
@@ -1900,6 +1914,16 @@
       }
     }
     if (form && nField) { try { form.updateFieldAppearances(font); } catch (e) { console.error(e); } }
+    // DocuSign boxes: page numbers and top-left positions in the finished file
+    if (opts.tabs) {
+      const all = out.getPages();
+      for (const t of pendingTabs) {
+        const n = all.indexOf(t.page);
+        if (n < 0) continue;
+        const H = t.page.getHeight();
+        opts.tabs.push({ role: t.role, type: t.type, label: t.label, page: n + 1, x: Math.round(t.x), y: Math.round(H - t.top), w: Math.round(t.w) });
+      }
+    }
     return await out.save();
   };
 

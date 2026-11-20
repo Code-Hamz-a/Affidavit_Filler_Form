@@ -7,6 +7,7 @@ import QRCode from 'qrcode';
 import { config, POLICY, ACCESS, TOOL_DIR, PUBLIC_DIR } from './config.js';
 import { db, now, audit, userById, userByEmail, userCount, adminCount, accessOf, setMeta, cleanup } from './db.js';
 import * as sec from './security.js';
+import { docusignConfigured, docusignDemo, sendEnvelope, DocusignError } from './docusign.js';
 
 const MIN = 60 * 1000;
 const COOKIE = config.insecureHttp ? 'af_sid' : '__Host-af_sid';
@@ -142,7 +143,9 @@ app.use('/api', (req, res, next) => {
   }
   next();
 });
-app.use(express.json({ limit: '20kb' }));
+// Small JSON bodies everywhere — except the DocuSign route, which carries the finished PDF.
+const smallJson = express.json({ limit: '20kb' });
+app.use((req, res, next) => req.path === '/api/docusign/send' ? next() : smallJson(req, res, next));
 
 // ------------------------------------------------------------ pages
 const sendPage = name => (req, res) => {
@@ -183,6 +186,38 @@ app.get('/app/', needStage('full'), (req, res) => { res.set('Cache-Control', 'no
 // The pages link to each other by file name ("Itemized Billing.html", "Affidavit Filler.html").
 app.get(/^\/app\/Itemized(%20| )Billing\.html$/, needStage('full'), (req, res) => { res.set('Cache-Control', 'no-store').type('html').send(toolHtml('Itemized Billing.html')); });
 app.get(/^\/app\/Affidavit(%20| )Filler\.html$/, (req, res) => res.redirect(302, '/app/'));
+
+// ------------------------------------------------------------ DocuSign: send the finished affidavit for e-signature
+// The custodian signs first, then the notary. The PDF passes through to DocuSign and is not kept on this server.
+const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/;
+app.get('/api/docusign/status', needStage('full'), (req, res) => res.json({ configured: docusignConfigured(), demo: docusignDemo() }));
+app.post('/api/docusign/send', needStage('full'), express.json({ limit: '40mb' }), async (req, res) => {
+  if (!docusignConfigured()) return fail(res, 503, 'DocuSign is not set up on this server yet.');
+  const b = req.body || {}, acc = accessOf(req.user);
+  const kind = b.type === 'billing' ? 'billing' : 'records';
+  if (!acc.includes(kind)) return fail(res, 403, `Your account cannot create ${kind} affidavits.`);
+  if (b.subpoena && !acc.includes('subpoena')) return fail(res, 403, 'Your account cannot answer subpoenas.');
+  const person = (p, who) => {
+    const name = str(p && p.name, 100), email = str(p && p.email, 254);
+    if (!name) return { error: `Enter the ${who}'s name.` };
+    if (!EMAIL_RE.test(email)) return { error: `Enter a valid email for the ${who}.` };
+    return { name, email };
+  };
+  const custodian = person(b.custodian, 'custodian'), notary = person(b.notary, 'notary');
+  if (custodian.error || notary.error) return fail(res, 400, custodian.error || notary.error);
+  if (typeof b.pdfBase64 !== 'string' || b.pdfBase64.length < 100 || !/^[A-Za-z0-9+/=]+$/.test(b.pdfBase64.slice(0, 200))) return fail(res, 400, 'The PDF is missing.');
+  if (!allow('docusign:' + req.user.id, 60, 60 * MIN)) return fail(res, 429, 'Too many envelopes in the last hour. Wait a while.');
+  try {
+    const r = await sendEnvelope({ pdfBase64: b.pdfBase64, name: str(b.name, 100), subject: str(b.subject, 100), custodian, notary,
+      tabs: Array.isArray(b.tabs) ? b.tabs.slice(0, 200) : [] }, `${req.protocol}://${req.get('host')}`);
+    audit('docusign', `${req.user.name} sent an affidavit to DocuSign (envelope ${r.envelopeId})`, req.user.email, ipOf(req));
+    res.json(r);
+  } catch (e) {
+    if (e instanceof DocusignError) return fail(res, e.consent ? 409 : 502, e.message, e.consent ? { consent: e.consent } : {});
+    console.error(e);
+    fail(res, 502, 'Could not reach DocuSign. Try again in a minute.');
+  }
+});
 for (const dir of ['js', 'lib']) {
   app.use(`/app/${dir}`, needStage('full'), express.static(path.join(TOOL_DIR, dir), { index: false, dotfiles: 'deny' }));
 }

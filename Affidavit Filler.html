@@ -71,6 +71,7 @@
   .msgs .err { background: var(--err-bg); color: var(--err); }
   .msgs .warn { background: var(--warn-bg); color: var(--warn); }
   .msgs .ok { background: var(--ok-bg); color: var(--ok); }
+  .msgs .info { background: #eef3fb; color: #1d4f91; }
   details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
   .preview-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
   .preview-bar .grow { flex: 1; }
@@ -132,6 +133,10 @@
   .pagewrap.cut canvas, .pagewrap.cut .ov { opacity: .25; }
   .modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 60; }
   .modal[hidden] { display: none; }
+  .ds-box { width: min(620px, 94vw); }
+  .ds-body { padding: 14px 18px 18px; overflow: auto; }
+  .ds-btn { margin-top: 8px; width: 100%; background: #fff; border: 1.5px solid #4c2bd0; color: #4c2bd0; }
+  .ds-btn:hover { background: #f3f0ff; }
   .modal-box { background: var(--card); border-radius: 10px; width: min(1000px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
   .modal-head { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
   .pg-grid { overflow: auto; padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
@@ -177,7 +182,7 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v3.60 · 20 Nov 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v3.61 · 21 Nov 2026 · <b id="app-ready">Loading…</b></span>
   <a href="Itemized Billing.html" class="nav" title="CareCapital Billing Summary from a UB-04 / CMS-1500">Itemized Billing ↗</a>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
@@ -361,6 +366,7 @@
       </div>
       <div class="msgs" id="msgs" style="margin-top:10px"></div>
       <button class="primary big" id="btn-generate">Create &amp; download PDF</button>
+      <button class="big ds-btn" id="btn-docusign" hidden title="Send the affidavit to the custodian, then the notary, to sign with DocuSign">Send with DocuSign…</button>
       <div class="row" style="margin-top:8px"><button id="btn-open" disabled>Open last PDF in a new tab</button><span id="out-info" class="hint" style="margin:0"></span></div>
       <button class="big soft" id="btn-reset2" style="margin-top:10px" title="Clear everything and start a new request">New request</button>
     </div>
@@ -391,6 +397,26 @@
   </section>
 </main>
 
+<div class="modal" id="ds-modal" hidden>
+  <div class="modal-box ds-box">
+    <div class="modal-head"><b>Send with DocuSign</b><span id="ds-mode" class="hint" style="margin:0; flex:1"></span><button id="ds-cancel">Close</button></div>
+    <div class="ds-body">
+      <div class="hint" style="margin-top:0">The custodian gets the email first and signs on the affiant line. Then the notary signs on the notary line and types anything still empty (date, name, commission). Your uploaded signatures are not put on the PDF — they sign in DocuSign.</div>
+      <h3 class="subhead">1. Custodian</h3>
+      <div class="grid">
+        <div><label>Name</label><input type="text" id="ds-cust-name" autocomplete="off"></div>
+        <div><label>Email</label><input type="email" id="ds-cust-email" autocomplete="off"></div>
+      </div>
+      <h3 class="subhead">2. Notary</h3>
+      <div class="grid">
+        <div><label>Name</label><input type="text" id="ds-not-name" autocomplete="off"></div>
+        <div><label>Email</label><input type="email" id="ds-not-email" autocomplete="off"></div>
+      </div>
+      <div id="ds-msg" class="msgs" style="margin-top:12px"></div>
+      <div class="row" style="margin-top:12px; justify-content:flex-end"><button class="primary big" id="ds-send">Send for signature</button></div>
+    </div>
+  </div>
+</div>
 <div class="modal" id="pg-modal" hidden>
   <div class="modal-box">
     <div class="modal-head">
@@ -418,9 +444,9 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/facility-directory.js?v=3.60"></script>
-<script src="js/engine.js?v=3.60"></script>
-<script src="js/ocr.js?v=3.60"></script>
-<script src="js/app.js?v=3.60"></script>
+<script src="js/facility-directory.js?v=3.61"></script>
+<script src="js/engine.js?v=3.61"></script>
+<script src="js/ocr.js?v=3.61"></script>
+<script src="js/app.js?v=3.61"></script>
 </body>
 </html>

@@ -66,7 +66,7 @@
 
     // The PDF cannot be made for a type or a subpoena the user has no access to (the tool may switch type when a request is read).
     document.addEventListener('click', e => {
-      if (!e.target.closest('#btn-generate')) return;
+      if (!e.target.closest('#btn-generate, #btn-docusign, #ds-send')) return;
       const type = (document.querySelector('input[name=type]:checked') || {}).value;
       const subpoena = /Subpoena \/ DWQ/.test(($('#req-info') || {}).textContent || '');
       let why = '';

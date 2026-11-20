@@ -1503,17 +1503,45 @@
 
   // ------------------------------------------------------------ generate
   $('#btn-generate').addEventListener('click', async () => {
+    if (!readyForPdf()) return;
+
+    busy(true, 'Creating PDF…');
+    try {
+      const { bytes, name } = await makePdf(false);
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      if (S.lastUrl) URL.revokeObjectURL(S.lastUrl);
+      S.lastUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = S.lastUrl; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      $('#btn-open').disabled = false;
+      const outPages = await window.PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true }).then(x => x.getPageCount());
+      $('#out-info').textContent = `Saved “${name}” · ${outPages} pages · ${(bytes.length / 1024 / 1024).toFixed(2)} MB`;
+      // remember facilities that are not in the list yet
+      const fac = val('f-facility');
+      if (fac && !activeProfile()) addProfiles([fac]);
+    } catch (e) {
+      console.error(e);
+      alert('Could not create the PDF: ' + e.message);
+    } finally { busy(false); }
+  });
+
+  // Checks before a PDF is made (download or DocuSign). Returns false when the user should fix something first.
+  function readyForPdf() {
     const { errs, warns } = problems();
     if (errs.length) {
       renderMessages();
       if (errs[0].focus) { const el = $('#' + errs[0].focus); if (errs[0].focus.startsWith('s-')) $('#settings-box').open = true; el.focus(); el.scrollIntoView({ block: 'center' }); }
-      return;
+      return false;
     }
     const serious = warns.filter(w => /not found on|not found in|does not match|before the requested|differs:/.test(w));
-    if (serious.length && !confirm('Please check before creating the PDF:\n\n• ' + serious.join('\n• ') + '\n\nCreate the PDF anyway?')) return;
+    return !(serious.length && !confirm('Please check before creating the PDF:\n\n• ' + serious.join('\n• ') + '\n\nCreate the PDF anyway?'));
+  }
 
-    busy(true, 'Creating PDF…');
-    try {
+  // Builds the finished PDF. forSign = for DocuSign: no signature pictures (they sign there), and the spots of the
+  // "Sign here" / text boxes are returned in tabs.
+  async function makePdf(forSign) {
+    {
       const d = caseData();
       const billing = type() === 'billing';
       // The notary's blanks (filled or not) go out as editable form fields; the other values are printed sharp on the page,
@@ -1534,29 +1562,79 @@
       // white-out annotations on the affidavit pages we write on (see AE.buildPdf)
       const filledPages = new Set([...fills.filter(f => (f.value || '').trim()).map(f => f.page), ...ink.map(k => k.page)]);
       const whiteouts = S.req ? S.req.pages.filter(p => filledPages.has(p.num)).flatMap(p => (p.whiteouts || []).map(w => ({ ...w, page: p.num }))) : [];
-      const png = slot => sigActive(slot) ? { png: dataUrlBytes(settings[slot.url]) } : null;
+      const png = slot => sigActive(slot) && !(forSign && slot.p !== 'stamp') ? { png: dataUrlBytes(settings[slot.url]) } : null;
+      const tabs = forSign ? [] : null;
       const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, ink, attachments, standard, whiteouts,
-        signature: png(SIG_SLOTS[0]), notarySignature: png(SIG_SLOTS[1]), notaryStamp: png(SIG_SLOTS[2]),
-        pics: S.pics.filter(pc => S.affPages.has(pc.page)).map(pc => ({ page: pc.page, x: pc.x, y: pc.y, w: pc.w, h: pc.h, which: { sig: 'affiant', nsig: 'notary', stamp: 'stamp' }[pc.p] })) });
+        signature: png(SIG_SLOTS[0]), notarySignature: png(SIG_SLOTS[1]), notaryStamp: png(SIG_SLOTS[2]), tabs,
+        pics: S.pics.filter(pc => S.affPages.has(pc.page) && !(forSign && pc.p !== 'stamp')).map(pc => ({ page: pc.page, x: pc.x, y: pc.y, w: pc.w, h: pc.h, which: { sig: 'affiant', nsig: 'notary', stamp: 'stamp' }[pc.p] })) });
       let name = val('f-filename') || AE.fileName(d.patient, type(), null, val('f-reqid'), val('f-facility'));
       if (!/\.pdf$/i.test(name)) name += '.pdf';
       name = name.replace(/[\\/:*?"<>|]+/g, '');
-      const blob = new Blob([bytes], { type: 'application/pdf' });
-      if (S.lastUrl) URL.revokeObjectURL(S.lastUrl);
-      S.lastUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = S.lastUrl; a.download = name;
-      document.body.appendChild(a); a.click(); a.remove();
-      $('#btn-open').disabled = false;
-      const outPages = await window.PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true }).then(x => x.getPageCount());
-      $('#out-info').textContent = `Saved “${name}” · ${outPages} pages · ${(bytes.length / 1024 / 1024).toFixed(2)} MB`;
-      // remember facilities that are not in the list yet
-      const fac = val('f-facility');
-      if (fac && !activeProfile()) addProfiles([fac]);
+      return { bytes, name, tabs };
+    }
+  }
+
+  // ------------------------------------------------------------ DocuSign (only when the tool is served by the server)
+  // The server holds the DocuSign keys; the button shows only when it says DocuSign is set up.
+  if (/^https?:$/.test(location.protocol)) fetch('/api/docusign/status', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(st => {
+    if (!st || !st.configured) return;
+    $('#btn-docusign').hidden = false;
+    $('#ds-mode').textContent = st.demo ? '· DocuSign sandbox (test) account — not legally binding' : '';
+  }).catch(() => { /* offline file: no server, no DocuSign */ });
+  const DS_FIELDS = { 'ds-cust-name': 'dsCustName', 'ds-cust-email': 'dsCustEmail', 'ds-not-name': 'dsNotName', 'ds-not-email': 'dsNotEmail' };
+  $('#btn-docusign').addEventListener('click', () => {
+    if (!readyForPdf()) return;
+    for (const [id, key] of Object.entries(DS_FIELDS)) $('#' + id).value = settings[key] || (id === 'ds-cust-name' ? caseData().custodian || '' : '');
+    $('#ds-msg').innerHTML = ''; $('#ds-send').disabled = false;
+    $('#ds-modal').hidden = false;
+    $('#ds-cust-email').focus();
+  });
+  $('#ds-cancel').addEventListener('click', () => { $('#ds-modal').hidden = true; });
+  const dsMsg = (kind, html) => { $('#ds-msg').innerHTML = `<div class="msg ${kind}">${html}</div>`; };
+  const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function toBase64(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  $('#ds-send').addEventListener('click', async () => {
+    const person = (n, e) => ({ name: val(n), email: val(e) });
+    const custodian = person('ds-cust-name', 'ds-cust-email'), notary = person('ds-not-name', 'ds-not-email');
+    const ok = p => p.name && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(p.email);
+    if (!ok(custodian)) return dsMsg('err', 'Enter the custodian’s name and a valid email.');
+    if (!ok(notary)) return dsMsg('err', 'Enter the notary’s name and a valid email.');
+    for (const [id, key] of Object.entries(DS_FIELDS)) settings[key] = val(id);
+    saveSettings();
+    $('#ds-send').disabled = true;
+    dsMsg('info', 'Creating the PDF…');
+    try {
+      const { bytes, tabs } = await makePdf(true);
+      if (bytes.length > 24 * 1024 * 1024) throw new Error('The PDF is larger than DocuSign accepts (25 MB). Leave some pages or invoices out and try again.');
+      dsMsg('info', 'Sending to DocuSign…');
+      const reqId = val('f-reqid');
+      const r = await fetch('/api/docusign/send', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        // no patient name in the email subject or document name
+        body: JSON.stringify({
+          pdfBase64: toBase64(bytes), name: `Affidavit${reqId ? ' ' + reqId : ''}.pdf`, subject: `Please sign: affidavit${reqId ? ' – request ' + reqId : ''}`,
+          type: type(), subpoena: /Subpoena \/ DWQ/.test($('#req-info').textContent || ''), custodian, notary, tabs
+        })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (j.consent) {
+        $('#ds-send').disabled = false;
+        return dsMsg('warn', `${escHtml(j.error)} An admin opens <a href="${escHtml(j.consent)}" target="_blank" rel="noopener">this DocuSign page</a> once, presses <b>Allow</b>, then sends again.`);
+      }
+      if (!r.ok) throw new Error(j.error || `DocuSign send failed (${r.status})`);
+      dsMsg('ok', `Sent. The custodian (${escHtml(custodian.email)}) gets the email first, then the notary (${escHtml(notary.email)}). Envelope ID: <b>${escHtml(j.envelopeId || '')}</b>.` +
+        (tabs.some(t => t.type === 'sign') ? '' : ' No signature line was found, so DocuSign lets them place their signature themselves.'));
+      $('#out-info').textContent = `Sent to DocuSign · envelope ${j.envelopeId || ''}`;
     } catch (e) {
       console.error(e);
-      alert('Could not create the PDF: ' + e.message);
-    } finally { busy(false); }
+      $('#ds-send').disabled = false;
+      dsMsg('err', escHtml(e.message));
+    }
   });
   $('#btn-open').addEventListener('click', () => { if (S.lastUrl) window.open(S.lastUrl, '_blank'); });
 
