@@ -981,6 +981,9 @@
     // "from ____ to ⏎ ____." — the "to" may end the line above
     if (/\b(to|through|thru)\s*$/.test(lead) && /\bfrom\b/.test(b.prevLine.toLowerCase() + ' ' + pre) && !/^\s*the present/.test(sufL)) return 'dos_to';
     if (/(dates? of service|\bdos\b|service dates?)\s*[:?]?\s*$/.test(before)) return 'dos_range';
+    // "…pages of records for said services that ⏎ ____ provided on ____."
+    if (/\b(provided|rendered|furnished|performed) on\s*$/.test(lead)) return 'dos_range';
+    if (/^\s*(provided|rendered|furnished|performed) on\b/.test(sufL) && /\b(services|treatment|care) (that|which)\s*$/.test(lead)) return 'facility';
 
     if (/(date of birth|\bdob\b|d\.o\.b\.?|birth ?date)( of)?\s*[:?]?\s*$/.test(before)) return 'dob';
     // "____, with the date of birth of ____" — the name comes right before its date of birth
