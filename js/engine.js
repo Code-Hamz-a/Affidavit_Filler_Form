@@ -1846,6 +1846,12 @@
       page.drawText(v, { x, y: f.y + 1.5, size, font, color: f.color ? rgb(...f.color) : rgb(0, 0, 0) });
     }
 
+    // copies of a signature / stamp the user pasted on the page
+    for (const pc of opts.pics || []) {
+      const img = pc.which === 'stamp' ? stampImg : sigImgs[pc.which], page = pages[pc.page - 1];
+      if (img && page && (!keepSet || keepSet.has(pc.page))) page.drawImage(img, { x: pc.x, y: pc.y, width: pc.w, height: pc.h });
+    }
+
     // pen drawings: an SVG path is y-down, so the PDF y is negated (drawn from the page origin)
     for (const k of opts.ink || []) {
       const page = pages[k.page - 1];

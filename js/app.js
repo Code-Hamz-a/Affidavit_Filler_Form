@@ -240,7 +240,9 @@
   function resetState() {
     // userAff = pages the user unlocked for editing because the tool did not recognise them as the affidavit
     // customs = text the user typed on the page, ink = pen strokes, tool = 'text' | 'draw' | 'erase' | null
-    S = { req: null, affPages: new Set(), userAff: new Set(), blanks: [], customs: [], ink: [], undo: [], atts: [], manual: {}, sel: null, tool: null, editing: null, lastUrl: null, nextId: 1 };
+    // pics = copies of a signature / stamp pasted with Ctrl+V; picked = the selected picture; clip = the copied one
+    S = { req: null, affPages: new Set(), userAff: new Set(), blanks: [], customs: [], ink: [], undo: [], atts: [], manual: {}, sel: null, tool: null, editing: null, lastUrl: null, nextId: 1,
+      pics: [], picked: null, clip: null, hover: null };
   }
   resetState();
   const toBlankRow = b => ({
@@ -302,7 +304,7 @@
       if (S.req && S.req.doc) S.req.doc.destroy();
       S.req = { name: file.name, bytes, doc: r.doc, pages: r.pages, info, cut: new Set(), allBlanks: blanks }; // cut = pages the user removed
       S.manual = {};
-      S.customs = []; S.ink = []; S.undo = [];
+      S.customs = []; S.ink = []; S.undo = []; S.pics = []; S.picked = null;
       S.userAff = new Set();
       S.affPages = new Set(r.pages.filter(p => AE.isAffidavitPage(p)).map(p => p.num));
       S.blanks = blanks.filter(b => b.pageHasAffidavit && S.affPages.has(b.page)).map(toBlankRow);
@@ -1135,6 +1137,7 @@
       box.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
         e.preventDefault(); e.stopPropagation();
+        pickPic(box, { p: slot.p, page: b.page, rect: () => AE.placeBox(base, slotPlace(b, slot)) });
         const resize = e.target.classList.contains('rs');
         const rect = pv.wrap.getBoundingClientRect();
         const at = ev => pv.vp.convertToPdfPoint(ev.clientX - rect.left, ev.clientY - rect.top);
@@ -1163,6 +1166,41 @@
         if (slot.remember && settings[slot.remember]) { delete settings[slot.remember]; saveSettings(); }
         place();
       });
+      pv.wrap.appendChild(box);
+    }
+    // copies pasted with Ctrl+V: drag to move, blue corner to resize, Delete to remove
+    for (const pc of S.pics) {
+      const slot = SIG_SLOTS.find(x => x.p === pc.p), pv = pageViews.get(pc.page);
+      if (!slot || !sigActive(slot) || !pv) continue;
+      const box = document.createElement('div'); box.className = 'sig-ov' + (S.picked && S.picked.pic === pc ? ' picked' : '');
+      box.title = `Copy of the ${slot.what} — drag to move · drag the blue corner to resize · Delete removes it`;
+      box.innerHTML = `<img src="${settings[slot.url]}" alt=""><span class="rs"></span>`;
+      const place = () => {
+        const p1 = pv.vp.convertToViewportPoint(pc.x, pc.y + pc.h), p2 = pv.vp.convertToViewportPoint(pc.x + pc.w, pc.y);
+        Object.assign(box.style, { left: Math.min(p1[0], p2[0]) + 'px', top: Math.min(p1[1], p2[1]) + 'px', width: Math.abs(p2[0] - p1[0]) + 'px', height: Math.abs(p2[1] - p1[1]) + 'px' });
+      };
+      place();
+      box.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        pickPic(box, { p: pc.p, page: pc.page, pic: pc, rect: () => pc });
+        const resize = e.target.classList.contains('rs');
+        const rect = pv.wrap.getBoundingClientRect();
+        const at = ev => pv.vp.convertToPdfPoint(ev.clientX - rect.left, ev.clientY - rect.top);
+        const p0 = at(e), st = { ...pc };
+        box.classList.add('drag');
+        const move = ev => {
+          const p = at(ev);
+          if (resize) {
+            const k = Math.max(0.3, Math.min(4, (st.w + p[0] - p0[0]) / st.w));
+            pc.w = st.w * k; pc.h = st.h * k; pc.y = st.y + st.h - pc.h; // the top-left corner stays put
+          } else { pc.x = st.x + p[0] - p0[0]; pc.y = st.y + p[1] - p0[1]; }
+          place();
+        };
+        const up = () => { box.classList.remove('drag'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+        window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+      });
+      box.addEventListener('click', e => e.stopPropagation());
       pv.wrap.appendChild(box);
     }
     for (const b of [...S.blanks, ...S.customs]) {
@@ -1278,13 +1316,58 @@
     });
   }
 
+  // ------------------------------------------------------------ copy / paste a signature or stamp
+  // Click a signature or stamp on the preview, Ctrl+C, then Ctrl+V: a copy appears where the mouse is (on an affidavit
+  // page), or next to the original. Copies can be dragged, resized, removed with Delete, and undone with Ctrl+Z.
+  function pickPic(box, info) {
+    $$('.sig-ov.picked').forEach(x => x.classList.remove('picked'));
+    S.picked = info; if (box) box.classList.add('picked');
+  }
+  document.addEventListener('pointerdown', e => { if (S.picked && !e.target.closest('.sig-ov')) pickPic(null, null); });
+  document.addEventListener('pointermove', e => {
+    for (const [n, pv] of pageViews) {
+      if (!pv.wrap.contains(e.target)) continue;
+      const r = pv.wrap.getBoundingClientRect();
+      S.hover = { page: n, pt: pv.vp.convertToPdfPoint(e.clientX - r.left, e.clientY - r.top) };
+      return;
+    }
+    S.hover = null;
+  });
+  function pasteClip() {
+    const c = S.clip;
+    const onPage = S.hover && S.affPages.has(S.hover.page) ? S.hover : null;
+    if (!onPage && !S.affPages.has(c.page)) return;
+    const pc = onPage
+      ? { p: c.p, page: onPage.page, w: c.w, h: c.h, x: onPage.pt[0] - c.w / 2, y: onPage.pt[1] - c.h / 2 }
+      : { p: c.p, page: c.page, w: c.w, h: c.h, x: c.x + 18, y: c.y - 18 };
+    if (onPage && Math.abs(pc.x - c.x) < 4 && Math.abs(pc.y - c.y) < 4 && pc.page === c.page) { pc.x += 18; pc.y -= 18; }
+    S.pics.push(pc); S.undo.push({ pic: pc });
+    S.clip = { ...c, page: pc.page, x: pc.x, y: pc.y }; // the next paste goes next to this one
+    S.picked = { p: pc.p, page: pc.page, pic: pc, rect: () => pc };
+    renderOverlays();
+  }
+  function removePic(pc) {
+    S.pics = S.pics.filter(x => x !== pc);
+    if (S.picked && S.picked.pic === pc) S.picked = null;
+    renderOverlays();
+  }
+
   // Esc leaves the tool; Ctrl+Z takes back the last text / pen line; Delete removes the selected text; arrows nudge it.
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && S.tool) return setTool(null);
     if (e.target.closest('input, textarea, select')) return;
+    const ctrl = e.ctrlKey || e.metaKey, key = e.key.toLowerCase();
+    if (ctrl && key === 'c' && S.picked && !String(window.getSelection() || '')) {
+      const r = S.picked.rect();
+      S.clip = { p: S.picked.p, page: S.picked.page, x: r.x, y: r.y, w: r.w, h: r.h };
+      e.preventDefault(); return;
+    }
+    if (ctrl && key === 'v' && S.clip) { e.preventDefault(); return pasteClip(); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && S.picked && S.picked.pic) { e.preventDefault(); return removePic(S.picked.pic); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
       while (S.undo.length) {
         const u = S.undo.pop();
+        if (u.pic && S.pics.includes(u.pic)) { removePic(u.pic); break; }
         if (u.ink && S.ink.includes(u.ink)) { S.ink = S.ink.filter(k => k !== u.ink); renderInk(); refresh(); break; }
         if (u.text && S.customs.includes(u.text)) { deleteCustom(u.text); break; }
       }
@@ -1429,7 +1512,8 @@
       const whiteouts = S.req ? S.req.pages.filter(p => filledPages.has(p.num)).flatMap(p => (p.whiteouts || []).map(w => ({ ...w, page: p.num }))) : [];
       const png = slot => sigActive(slot) ? { png: dataUrlBytes(settings[slot.url]) } : null;
       const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, ink, attachments, standard, whiteouts,
-        signature: png(SIG_SLOTS[0]), notarySignature: png(SIG_SLOTS[1]), notaryStamp: png(SIG_SLOTS[2]) });
+        signature: png(SIG_SLOTS[0]), notarySignature: png(SIG_SLOTS[1]), notaryStamp: png(SIG_SLOTS[2]),
+        pics: S.pics.filter(pc => S.affPages.has(pc.page)).map(pc => ({ page: pc.page, x: pc.x, y: pc.y, w: pc.w, h: pc.h, which: { sig: 'affiant', nsig: 'notary', stamp: 'stamp' }[pc.p] })) });
       let name = val('f-filename') || AE.fileName(d.patient, type(), null, val('f-reqid'), val('f-facility'));
       if (!/\.pdf$/i.test(name)) name += '.pdf';
       name = name.replace(/[\\/:*?"<>|]+/g, '');
