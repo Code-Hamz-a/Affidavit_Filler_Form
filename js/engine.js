@@ -1223,6 +1223,7 @@
   }
 
   // Value for a field kind given the case data.
+  const ccEmployer = d => /c\/o\s*care ?capital/i.test(d.facility || '') ? 'Care Capital ' + (d.companyAddress || '1911 Bagby St Houston Tx 77002') : '';
   AE.valueFor = function (kind, d) {
     const sd = d.swornDate || new Date();
     const money = v => AE.fmtMoney(v == null || v === '' ? 0 : v);
@@ -1283,10 +1284,11 @@
       case 'custodian_title_addr': return [d.custodian, d.address, d.phone, d.title].filter(Boolean).join(', ');
       // "Total amount still owed and by whom" → "$147,717.77, Jane Doe"
       case 'amt_balance_whom': return d.balance == null ? '' : (+d.balance || 0) > 0 && d.patient ? `${money(d.balance)}, ${d.patient}` : money(d.balance);
-      case 'employer_address': return [d.facility, d.address, d.phone].filter(Boolean).join(', ');
+      // CareCapital facilities: the custodian is employed by Care Capital at the company address (Settings)
+      case 'employer_address': return ccEmployer(d) || [d.facility, d.address, d.phone].filter(Boolean).join(', ');
       case 'employer_address_phone': return [d.facility, d.address, d.phone].filter(Boolean).join(', ');
       case 'custodian_title_addr_phone': return [d.custodian, d.address, d.phone, d.title].filter(Boolean).join(', ');
-      case 'custodian_employer': return [d.custodian, d.facility, d.address, d.phone].filter(Boolean).join(', ');
+      case 'custodian_employer': return ccEmployer(d) ? [d.custodian, ccEmployer(d)].filter(Boolean).join(', ') : [d.custodian, d.facility, d.address, d.phone].filter(Boolean).join(', ');
       case 'no_info': return d.noInfo || '';
       case 'retention': return d.retention || '';
       case 'notary_day': return d.fillSworn ? String(sd.getDate()) : '';

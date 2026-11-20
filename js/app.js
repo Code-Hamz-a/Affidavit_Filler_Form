@@ -652,6 +652,7 @@
       custodian: (prof && prof.custodian) || settings.custodian, title: settings.title,
       // the facility's own address + phone; a facility without an address uses the Settings default (which carries its own phone)
       address: val('f-address') || settings.address, phone: val('f-address') ? val('f-phone') : '', noInfo: settings.noInfo, retention: settings.retention, type: type(),
+      companyAddress: settings.address,
       county: (prof && prof.county) || settings.county, state: settings.state,
       facility: printName(val('f-facility')), patient: val('f-patient'), dob: val('f-dob'),
       dosFrom: val('f-from'), dosTo: val('f-to'),
