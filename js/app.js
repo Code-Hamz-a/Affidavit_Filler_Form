@@ -1295,11 +1295,13 @@
     try {
       const d = caseData();
       const billing = type() === 'billing';
-      const fills = [...S.blanks.filter(b => b.include), ...S.customs].filter(b => S.affPages.has(b.page)).map(b => b.user
+      // Every filled blank, and the empty signature / notary blanks, go out as editable form fields.
+      const NOTARY = /^(signature|notary_sig|commission|notary_(day|month|year2|year4|date)|state)$/;
+      const fills = [...S.blanks.filter(b => b.include || (NOTARY.test(b.kind) && !b.prefilled)), ...S.customs].filter(b => S.affPages.has(b.page)).map(b => b.user
         ? { page: b.page, x: b.x, y: b.y, free: true, size: b.size, color: hexRgb(b.color), value: b.override || '' }
         : {
-          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null,
-          value: shownValue(b),
+          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null, field: true, name: b.kind,
+          value: b.include ? shownValue(b) : '',
           align: /^(pages|notary_day|notary_year2|notary_year4)$/.test(b.kind) ? 'center' : 'left'
         });
       const ink = S.ink.filter(k => S.affPages.has(k.page)).map(k => ({ page: k.page, pts: k.pts, width: k.width, color: hexRgb(k.color) }));

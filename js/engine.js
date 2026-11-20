@@ -881,6 +881,8 @@
     // Stand-alone line with a caption underneath → signature / printed name line.
     const continues = /(county of|state of|day of|appeared|name is|records (of|for)|business of|representative of|kept by|for|which)\s*[,:]?$/.test(b.prevLine.toLowerCase().replace(/[_\s]+$/, ''));
     const dateDone = b.ocr && prev && prev.page === b.page && !sameLinePrev && /^notary_(month|year)/.test(prev.kind);
+    // a bare line above "(Notary's Name Typed or Printed)" — even right under "Notary Public, State of ____"
+    if (!pre.replace(/[^a-z0-9$]/g, '') && !suf.replace(/[^a-z0-9$]/g, '') && /^\s*\(?\s*notary'?s?\s+name\b/.test(next)) return 'notary_sig';
     if ((!continues || dateDone) && !pre.replace(/[^a-z0-9$]/g, '') && !suf.replace(/[^a-z0-9$]/g, '')) {
       if (/notary|printer name/.test(next)) return 'notary_sig';
       if (/printed name|print name|name \(print/.test(next)) return 'custodian';
@@ -1762,6 +1764,19 @@
       }
       page.drawRectangle({ x: wo.x, y: wo.y, width: wo.w, height: wo.h, color: rgb(1, 1, 1) });
     }
+    // Blanks become editable form fields (filled in, still changeable after download — the notary can type the date,
+    // state, name and commission date). Fields only go on pages that are kept.
+    const keepSet = opts.keepPages ? new Set(opts.keepPages) : null;
+    let form = null, nField = 0;
+    try { form = out.getForm(); } catch (e) { form = null; }
+    const addField = (page, f, v, size) => {
+      const tf = form.createTextField(`aff_${String(f.name || 'field').replace(/[^A-Za-z0-9_]/g, '')}_${++nField}`);
+      if (v) tf.setText(v);
+      if (f.align === 'center') tf.setAlignment(AE.PDFLib.TextAlignment.Center);
+      tf.addToPage(page, { x: f.x, y: f.y + 0.8, width: Math.max(20, f.w || 100), height: Math.max(9, size + 2.5),
+        font, textColor: f.color ? rgb(...f.color) : rgb(0, 0, 0), backgroundColor: undefined, borderColor: undefined, borderWidth: 0 });
+      tf.setFontSize(size);
+    };
     for (const f of opts.fills || []) {
       if (f.free) {
         // text the user typed on the page: own size and colour, one line per Enter, never shrunk
@@ -1774,10 +1789,11 @@
         continue;
       }
       const v = safe(f.value || '').trim();
-      if (!v) continue;
+      if (!v && !f.field) continue;
       const page = pages[f.page - 1];
       if (!page) continue;
-      if (f.cover) {
+      if (f.field && keepSet && !keepSet.has(f.page)) continue;
+      if (f.cover && v) {
         // White out a wrong value that was already written on the blank — stop above the underline.
         const y0 = Math.max(f.cover.y0 - 1.5, f.y + 0.6);
         page.drawRectangle({ x: f.cover.x0 - 1, y: y0, width: f.cover.x1 - f.cover.x0 + 2, height: f.cover.y1 - y0 + 1, color: rgb(1, 1, 1) });
@@ -1785,6 +1801,9 @@
       let size = Math.min(f.size || 11, Math.max(8, (f.h || 12) * 0.9)); // ≥ 8pt to start; shrinks below only to fit
       const avail = Math.max(10, (f.w || 100) - 2);
       while (size > 6 && font.widthOfTextAtSize(v, size) > avail) size -= 0.5;
+      if (f.field && form) {
+        try { addField(page, f, v, size); continue; } catch (e) { console.error(e); if (!v) continue; }
+      } else if (!v) continue;
       const tw = font.widthOfTextAtSize(v, size);
       let x = f.x + 1;
       if (f.align === 'center' && tw < (f.w || 0)) x = f.x + ((f.w || 0) - tw) / 2;
@@ -1805,7 +1824,7 @@
     }
 
     if (opts.standard) {
-      const sp = drawStandard(out, font, bold, safe, opts.standard);
+      const sp = drawStandard(out, font, bold, safe, opts.standard, form ? (page, f) => { try { addField(page, f, '', 10); } catch (e) { console.error(e); } } : null);
       const at = Math.min(opts.standard.insertAt ?? 0, out.getPageCount());
       out.insertPage(at, sp);
     }
@@ -1833,10 +1852,11 @@
         p.drawImage(img, { x: (W - img.width * s) / 2, y: (H - img.height * s) / 2, width: img.width * s, height: img.height * s });
       }
     }
+    if (form && nField) { try { form.updateFieldAppearances(font); } catch (e) { console.error(e); } }
     return await out.save();
   };
 
-  function drawStandard(doc, font, bold, safe, st) {
+  function drawStandard(doc, font, bold, safe, st, field) {
     const { PDFPage, rgb } = AE.PDFLib;
     const t = AE.standardAffidavit(st.type, st.data);
     const page = PDFPage.create(doc);
@@ -1865,6 +1885,7 @@
     t.body.forEach((b, i) => para(b, small, /^[a-e]\. /.test(b) ? 18 : 36, /^[a-d]\. /.test(b) ? 4 : 10));
     y -= 18;
     page.drawLine({ start: { x: 324, y }, end: { x: R, y }, thickness: 0.7 });
+    if (field) field(page, { name: 'signature', x: 324, y, w: R - 324, h: 12 });
     y -= 13;
     page.drawText(safe(st.data.custodian || 'Affiant'), { x: 324, y, size: 10, font });
     y -= 12;
@@ -1873,6 +1894,7 @@
     para(t.sworn, 11, 36, 10);
     y -= 20;
     page.drawLine({ start: { x: 324, y }, end: { x: R, y }, thickness: 0.7 });
+    if (field) field(page, { name: 'notary_sig', x: 324, y, w: R - 324, h: 12 });
     y -= 13;
     page.drawText(safe(`Notary Public in and for the State of ${AE.stateLong(st.data.state) || '________'}`), { x: 324, y, size: 10, font });
     return page;
