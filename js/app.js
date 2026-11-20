@@ -134,7 +134,7 @@
   });
   // Export / import settings so colleagues get the same facilities and subpoena answers (no patient data inside).
   $('#set-export').addEventListener('click', () => {
-    const { signature, sigW, sigH, ...shared } = settings; // the signature never leaves this browser
+    const { signature, sigW, sigH, notarySig, nsigW, nsigH, ...shared } = settings; // signatures never leave this browser
     const blob = new Blob([JSON.stringify({ app: 'Affidavit Filler', exported: new Date().toISOString(), settings: shared }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'Affidavit Filler settings.json';
@@ -165,14 +165,21 @@
     alert(`Settings imported: ${added.length} new facilit${added.length === 1 ? 'y' : 'ies'}, ${Object.keys(incoming.answers || {}).length} remembered answer(s).`);
   });
 
-  // ------------------------------------------------------------ signature image
-  // The upload is cut to the ink, its white paper made transparent, and kept (as a PNG) in this browser only.
-  const sigActive = () => !!(settings.signature && settings.sigUse !== false);
+  // ------------------------------------------------------------ signature images
+  // Two slots: the affiant's signature and the notary's. Each upload is cut to the ink, its white paper made
+  // transparent, and kept (as a PNG) in this browser only.
+  const SIG_SLOTS = [
+    { p: 'sig', url: 'signature', w: 'sigW', h: 'sigH', use: 'sigUse', kind: 'signature', what: 'signature' },
+    { p: 'nsig', url: 'notarySig', w: 'nsigW', h: 'nsigH', use: 'nsigUse', kind: 'notary_sig', what: 'notary signature' },
+  ];
+  const sigActive = slot => !!(settings[slot.url] && settings[slot.use] !== false);
   function showSignature() {
-    const has = !!settings.signature;
-    $('#sig-img').hidden = !has; if (has) $('#sig-img').src = settings.signature;
-    $('#sig-none').hidden = has; $('#sig-del').hidden = !has; $('#sig-use-l').hidden = !has;
-    $('#sig-use').checked = settings.sigUse !== false;
+    for (const slot of SIG_SLOTS) {
+      const has = !!settings[slot.url], q = id => $('#' + id.replace('$', slot.p));
+      q('$-img').hidden = !has; if (has) q('$-img').src = settings[slot.url];
+      q('$-none').hidden = has; q('$-del').hidden = !has; q('$-use-l').hidden = !has;
+      q('$-use').checked = settings[slot.use] !== false;
+    }
   }
   async function readSignature(file) {
     const url = URL.createObjectURL(file);
@@ -199,20 +206,22 @@
       return { url: out.toDataURL('image/png'), w: out.width, h: out.height };
     } finally { URL.revokeObjectURL(url); }
   }
-  $('#in-sig').addEventListener('change', async e => {
-    const f = e.target.files[0]; e.target.value = '';
-    if (!f) return;
-    try {
-      const sig = await readSignature(f);
-      settings.signature = sig.url; settings.sigW = sig.w; settings.sigH = sig.h; settings.sigUse = true; saveSettings();
-    } catch (err) { return alert('Could not use this picture as a signature: ' + err.message); }
-    showSignature(); renderOverlays();
-  });
-  $('#sig-del').addEventListener('click', () => {
-    if (!confirm('Remove the saved signature from this browser?')) return;
-    delete settings.signature; delete settings.sigW; delete settings.sigH; saveSettings(); showSignature(); renderOverlays();
-  });
-  $('#sig-use').addEventListener('change', e => { settings.sigUse = e.target.checked; saveSettings(); renderOverlays(); });
+  for (const slot of SIG_SLOTS) {
+    $('#in-' + slot.p).addEventListener('change', async e => {
+      const f = e.target.files[0]; e.target.value = '';
+      if (!f) return;
+      try {
+        const sig = await readSignature(f);
+        settings[slot.url] = sig.url; settings[slot.w] = sig.w; settings[slot.h] = sig.h; settings[slot.use] = true; saveSettings();
+      } catch (err) { return alert(`Could not use this picture as the ${slot.what}: ` + err.message); }
+      showSignature(); renderOverlays();
+    });
+    $('#' + slot.p + '-del').addEventListener('click', () => {
+      if (!confirm(`Remove the saved ${slot.what} from this browser?`)) return;
+      delete settings[slot.url]; delete settings[slot.w]; delete settings[slot.h]; saveSettings(); showSignature(); renderOverlays();
+    });
+    $('#' + slot.p + '-use').addEventListener('change', e => { settings[slot.use] = e.target.checked; saveSettings(); renderOverlays(); });
+  }
   const dataUrlBytes = u => Uint8Array.from(atob(u.split(',')[1]), c => c.charCodeAt(0));
 
   const activeProfile = () => { const m = AE.matchFacility(val('f-facility'), settings.profiles); return m ? m.profile : null; };
@@ -1102,12 +1111,12 @@
 
   function renderOverlays() {
     $$('.ov, .sig-ov').forEach(o => o.remove());
-    // the signature picture on each affiant signature line (as it will be in the PDF)
-    if (sigActive()) for (const b of S.blanks) {
-      const pv = pageViews.get(b.page);
-      if (!pv || b.kind !== 'signature' || b.prefilled || !S.affPages.has(b.page) || (b.override || '').trim()) continue;
-      const img = document.createElement('img'); img.className = 'sig-ov'; img.src = settings.signature; img.alt = '';
-      const r = AE.signatureBox(b, settings.sigW || 0, settings.sigH || 0);
+    // the signature pictures on the affiant / notary signature lines (as they will be in the PDF)
+    for (const b of S.blanks) {
+      const slot = SIG_SLOTS.find(x => x.kind === b.kind), pv = pageViews.get(b.page);
+      if (!slot || !sigActive(slot) || !pv || b.prefilled || !S.affPages.has(b.page) || (b.override || '').trim()) continue;
+      const img = document.createElement('img'); img.className = 'sig-ov'; img.src = settings[slot.url]; img.alt = '';
+      const r = AE.signatureBox(b, settings[slot.w] || 0, settings[slot.h] || 0);
       const p1 = pv.vp.convertToViewportPoint(r.x, r.y + r.h), p2 = pv.vp.convertToViewportPoint(r.x + r.w, r.y);
       Object.assign(img.style, { left: Math.min(p1[0], p2[0]) + 'px', top: Math.min(p1[1], p2[1]) + 'px', width: Math.abs(p2[0] - p1[0]) + 'px', height: Math.abs(p2[1] - p1[1]) + 'px' });
       pv.wrap.appendChild(img);
@@ -1357,11 +1366,11 @@
       const d = caseData();
       const billing = type() === 'billing';
       // Every filled blank, and the empty signature / notary blanks, go out as editable form fields.
-      const NOTARY = /^(signature|notary_sig|commission|notary_(day|month|year2|year4|date)|state)$/;
+      const NOTARY = /^(signature|notary_sig|notary_name|commission|notary_(day|month|year2|year4|date)|state)$/;
       const fills = [...S.blanks.filter(b => b.include || (NOTARY.test(b.kind) && !b.prefilled)), ...S.customs].filter(b => S.affPages.has(b.page)).map(b => b.user
         ? { page: b.page, x: b.x, y: b.y, free: true, size: b.size, color: hexRgb(b.color), value: b.override || '' }
         : {
-          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null, field: true, name: b.kind, sig: b.kind === 'signature',
+          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null, field: true, name: b.kind, sig: b.kind === 'signature' ? 'affiant' : b.kind === 'notary_sig' ? 'notary' : null,
           value: b.include ? shownValue(b) : '',
           align: /^(pages|notary_day|notary_year2|notary_year4)$/.test(b.kind) ? 'center' : 'left'
         });
@@ -1373,8 +1382,9 @@
       // white-out annotations on the affidavit pages we write on (see AE.buildPdf)
       const filledPages = new Set([...fills.filter(f => (f.value || '').trim()).map(f => f.page), ...ink.map(k => k.page)]);
       const whiteouts = S.req ? S.req.pages.filter(p => filledPages.has(p.num)).flatMap(p => (p.whiteouts || []).map(w => ({ ...w, page: p.num }))) : [];
-      const signature = sigActive() ? { png: dataUrlBytes(settings.signature) } : null;
-      const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, ink, attachments, standard, whiteouts, signature });
+      const png = slot => sigActive(slot) ? { png: dataUrlBytes(settings[slot.url]) } : null;
+      const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, ink, attachments, standard, whiteouts,
+        signature: png(SIG_SLOTS[0]), notarySignature: png(SIG_SLOTS[1]) });
       let name = val('f-filename') || AE.fileName(d.patient, type(), null, val('f-reqid'), val('f-facility'));
       if (!/\.pdf$/i.test(name)) name += '.pdf';
       name = name.replace(/[\\/:*?"<>|]+/g, '');

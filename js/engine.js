@@ -75,12 +75,13 @@
     amt_lien: '$ Lien amount',
     signature: 'Signature line (left blank)',
     notary_sig: 'Notary signature (left blank)',
+    notary_name: "Notary's printed name (left blank)",
     commission: 'Notary commission (left blank)',
     unknown: 'Unrecognised blank',
     custom: 'Custom text'
   };
   // Kinds that are skipped by default — they get signed/stamped by hand.
-  AE.SKIP_KINDS = new Set(['signature', 'notary_sig', 'commission', 'unknown']);
+  AE.SKIP_KINDS = new Set(['signature', 'notary_sig', 'notary_name', 'commission', 'unknown']);
 
   // ---------------------------------------------------------------- dates
   AE.parseDate = function (s) {
@@ -882,7 +883,7 @@
     const continues = /(county of|state of|day of|appeared|name is|records (of|for)|business of|representative of|kept by|for|which)\s*[,:]?$/.test(b.prevLine.toLowerCase().replace(/[_\s]+$/, ''));
     const dateDone = b.ocr && prev && prev.page === b.page && !sameLinePrev && /^notary_(month|year)/.test(prev.kind);
     // a bare line above "(Notary's Name Typed or Printed)" — even right under "Notary Public, State of ____"
-    if (!pre.replace(/[^a-z0-9$]/g, '') && !suf.replace(/[^a-z0-9$]/g, '') && /^\s*\(?\s*notary'?s?\s+name\b/.test(next)) return 'notary_sig';
+    if (!pre.replace(/[^a-z0-9$]/g, '') && !suf.replace(/[^a-z0-9$]/g, '') && /^\s*\(?\s*notary'?s?\s+name\b/.test(next)) return 'notary_name';
     if ((!continues || dateDone) && !pre.replace(/[^a-z0-9$]/g, '') && !suf.replace(/[^a-z0-9$]/g, '')) {
       if (/notary|printer name/.test(next)) return 'notary_sig';
       if (/printed name|print name|name \(print/.test(next)) return 'custodian';
@@ -1777,10 +1778,11 @@
     const keepSet = opts.keepPages ? new Set(opts.keepPages) : null;
     let form = null, nField = 0;
     try { form = out.getForm(); } catch (e) { form = null; }
-    // the user's signature picture (PNG) goes on the affiant signature lines
-    let sigImg = null;
-    if (opts.signature && opts.signature.png) { try { sigImg = await out.embedPng(opts.signature.png); } catch (e) { console.error(e); } }
-    const drawSig = (page, f) => { const r = AE.signatureBox(f, sigImg.width, sigImg.height); page.drawImage(sigImg, { x: r.x, y: r.y, width: r.w, height: r.h }); };
+    // the user's signature pictures (PNG): the affiant's on the affiant signature lines, the notary's on the notary line
+    const embedSig = async o => { if (!o || !o.png) return null; try { return await out.embedPng(o.png); } catch (e) { console.error(e); return null; } };
+    const sigImgs = { affiant: await embedSig(opts.signature), notary: await embedSig(opts.notarySignature) };
+    const drawSig = (page, f, img) => { const r = AE.signatureBox(f, img.width, img.height); page.drawImage(img, { x: r.x, y: r.y, width: r.w, height: r.h }); };
+    const sigFor = name => name === 'signature' ? sigImgs.affiant : name === 'notary_sig' ? sigImgs.notary : null;
     const addField = (page, f, v, size) => {
       const tf = form.createTextField(`aff_${String(f.name || 'field').replace(/[^A-Za-z0-9_]/g, '')}_${++nField}`);
       if (v) tf.setText(v);
@@ -1805,7 +1807,7 @@
       const page = pages[f.page - 1];
       if (!page) continue;
       if (f.field && keepSet && !keepSet.has(f.page)) continue;
-      if (f.sig && sigImg && !v) { drawSig(page, f); continue; }
+      if (f.sig && sigImgs[f.sig] && !v) { drawSig(page, f, sigImgs[f.sig]); continue; }
       if (f.cover && v) {
         // White out a wrong value that was already written on the blank — stop above the underline.
         const y0 = Math.max(f.cover.y0 - 1.5, f.y + 0.6);
@@ -1837,10 +1839,11 @@
     }
 
     if (opts.standard) {
-      const sp = drawStandard(out, font, bold, safe, opts.standard, form ? (page, f, v) => {
-        if (f.name === 'signature' && sigImg) return drawSig(page, f);
-        try { addField(page, f, safe(v || ''), f.size || 10); } catch (e) { console.error(e); }
-      } : (sigImg ? (page, f) => { if (f.name === 'signature') drawSig(page, f); } : null));
+      const sp = drawStandard(out, font, bold, safe, opts.standard, (page, f, v) => {
+        if (sigFor(f.name)) return drawSig(page, f, sigFor(f.name));
+        if (form) try { return addField(page, f, safe(v || ''), f.size || 10); } catch (e) { console.error(e); }
+        if (v) page.drawText(safe(v), { x: f.x + 2, y: f.y + 1.5, size: f.size || 10, font, color: rgb(0, 0, 0) }); // no form possible: plain text
+      });
       const at = Math.min(opts.standard.insertAt ?? 0, out.getPageCount());
       out.insertPage(at, sp);
     }

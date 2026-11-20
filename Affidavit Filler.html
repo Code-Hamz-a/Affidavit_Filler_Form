@@ -171,7 +171,7 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v3.52 · 20 Nov 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v3.53 · 20 Nov 2026 · <b id="app-ready">Loading…</b></span>
   <a href="Itemized Billing.html" class="nav" title="CareCapital Billing Summary from a UB-04 / CMS-1500">Itemized Billing ↗</a>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
@@ -198,7 +198,16 @@
             <label id="sig-use-l" hidden><input type="checkbox" id="sig-use" checked> Sign the affidavit with it</label>
           </div>
         </div>
-        <div class="hint">A photo or scan of the signature on white paper (PNG or JPG). The white background is removed automatically. It goes on the affiant's signature line, stays only in this browser and is never exported with the settings.</div>
+        <h3 class="subhead">Notary signature (optional)</h3>
+        <div class="sig-row">
+          <div class="sig-box"><img id="nsig-img" alt="Notary signature" hidden><span id="nsig-none" class="muted">No notary signature</span></div>
+          <div class="sig-actions">
+            <label class="btn-like"><input type="file" id="in-nsig" accept="image/png,image/jpeg,image/webp" hidden>Upload notary signature…</label>
+            <button type="button" id="nsig-del" hidden>Remove</button>
+            <label id="nsig-use-l" hidden><input type="checkbox" id="nsig-use" checked> Sign the notary line with it</label>
+          </div>
+        </div>
+        <div class="hint">A photo or scan of a signature on white paper (PNG or JPG). The white background is removed automatically. The signature goes on the affiant's signature line, the notary signature on the notary's signature line. Both stay only in this browser and are never exported with the settings.</div>
         <h3 class="subhead">Standard subpoena answers</h3>
         <div class="grid">
           <div class="full"><label>Default business address &amp; phone (used only when the selected facility has no address)</label><input type="text" id="s-address"></div>
@@ -392,9 +401,9 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/facility-directory.js?v=3.52"></script>
-<script src="js/engine.js?v=3.52"></script>
-<script src="js/ocr.js?v=3.52"></script>
-<script src="js/app.js?v=3.52"></script>
+<script src="js/facility-directory.js?v=3.53"></script>
+<script src="js/engine.js?v=3.53"></script>
+<script src="js/ocr.js?v=3.53"></script>
+<script src="js/app.js?v=3.53"></script>
 </body>
 </html>
