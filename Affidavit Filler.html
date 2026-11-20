@@ -156,7 +156,11 @@
   .sig-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .btn-like { display: inline-block; padding: 6px 12px; border: 1px solid #b9c0cc; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; }
   .btn-like:hover { background: #f2f5fa; }
-  .sig-ov { position: absolute; pointer-events: none; z-index: 2; }
+  .sig-ov { position: absolute; z-index: 3; cursor: move; touch-action: none; outline: 1px dashed transparent; outline-offset: 1px; }
+  .sig-ov:hover, .sig-ov.drag { outline-color: #2f6fd6; }
+  .sig-ov img { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; }
+  .sig-ov .rs { position: absolute; right: -6px; bottom: -6px; width: 11px; height: 11px; border-radius: 2px; background: #2f6fd6; border: 1px solid #fff; cursor: nwse-resize; display: none; }
+  .sig-ov:hover .rs, .sig-ov.drag .rs { display: block; }
   .fac-scroll { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
   .fac-scroll th { position: sticky; top: 0; background: #fff; }
   .fac-scroll td input { padding: 3px 5px; font-size: 12px; }
@@ -171,7 +175,7 @@
     <div class="sub">Records &amp; billing affidavits · fills blanks, merges records/invoices, names the file — runs 100% offline</div>
   </div>
   <div class="spacer"></div>
-  <span id="app-status" class="status" title="Version of this tool">v3.54 · 20 Nov 2026 · <b id="app-ready">Loading…</b></span>
+  <span id="app-status" class="status" title="Version of this tool">v3.55 · 20 Nov 2026 · <b id="app-ready">Loading…</b></span>
   <a href="Itemized Billing.html" class="nav" title="CareCapital Billing Summary from a UB-04 / CMS-1500">Itemized Billing ↗</a>
   <button id="btn-reset" title="Clear everything and start a new request">New request</button>
 </header>
@@ -410,9 +414,9 @@
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
-<script src="js/facility-directory.js?v=3.54"></script>
-<script src="js/engine.js?v=3.54"></script>
-<script src="js/ocr.js?v=3.54"></script>
-<script src="js/app.js?v=3.54"></script>
+<script src="js/facility-directory.js?v=3.55"></script>
+<script src="js/engine.js?v=3.55"></script>
+<script src="js/ocr.js?v=3.55"></script>
+<script src="js/app.js?v=3.55"></script>
 </body>
 </html>

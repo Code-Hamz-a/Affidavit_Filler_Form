@@ -1753,6 +1753,13 @@
     return { x: Math.max(24, f.x - w - 14), y: Math.max(18, f.y + 10 - h), w, h }; // hangs down beside the notary block
   };
 
+  // A signature / stamp box moved (dx, dy in points) and resized (s) by the user on the preview.
+  AE.placeBox = function (r, pl) {
+    if (!pl) return r;
+    const s = pl.s || 1;
+    return { x: r.x + (pl.dx || 0), y: r.y + (pl.dy || 0), w: r.w * s, h: r.h * s };
+  };
+
   AE.buildPdf = async function (opts) {
     const { PDFDocument, rgb } = AE.PDFLib;
     let out;
@@ -1789,8 +1796,12 @@
     const embedSig = async o => { if (!o || !o.png) return null; try { return await out.embedPng(o.png); } catch (e) { console.error(e); return null; } };
     const sigImgs = { affiant: await embedSig(opts.signature), notary: await embedSig(opts.notarySignature) };
     const stampImg = await embedSig(opts.notaryStamp);
-    const drawStamp = (page, f) => { const r = AE.stampBox(f, stampImg.width, stampImg.height); page.drawImage(stampImg, { x: r.x, y: r.y, width: r.w, height: r.h }); };
-    const drawSig = (page, f, img) => { const r = AE.signatureBox(f, img.width, img.height); page.drawImage(img, { x: r.x, y: r.y, width: r.w, height: r.h }); };
+    const placeOf = (f, k) => f.place && f.place[k];
+    const drawStamp = (page, f) => { const r = AE.placeBox(AE.stampBox(f, stampImg.width, stampImg.height), placeOf(f, 'stamp')); page.drawImage(stampImg, { x: r.x, y: r.y, width: r.w, height: r.h }); };
+    const drawSig = (page, f, img) => {
+      const r = AE.placeBox(AE.signatureBox(f, img.width, img.height), placeOf(f, img === sigImgs.notary ? 'nsig' : 'sig'));
+      page.drawImage(img, { x: r.x, y: r.y, width: r.w, height: r.h });
+    };
     const sigFor = name => name === 'signature' ? sigImgs.affiant : name === 'notary_sig' ? sigImgs.notary : null;
     const addField = (page, f, v, size) => {
       const tf = form.createTextField(`aff_${String(f.name || 'field').replace(/[^A-Za-z0-9_]/g, '')}_${++nField}`);

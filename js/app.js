@@ -991,7 +991,7 @@
 
   // A click / drag on a page with a tool on: place text, draw, or erase.
   function pagePointer(e, n) {
-    if (!S.tool || e.button !== 0 || e.target.closest('.ov, button')) return;
+    if (!S.tool || e.button !== 0 || e.target.closest('.ov, .sig-ov, button')) return;
     if (S.editing) { S.editing.blur(); return; } // the first click outside only finishes the text being typed
     if (!S.affPages.has(n)) return alert(LOCKED_MSG);
     e.preventDefault();
@@ -1116,11 +1116,40 @@
     for (const b of S.blanks) for (const slot of SIG_SLOTS) {
       const pv = pageViews.get(b.page);
       if (slot.kind !== b.kind || !sigActive(slot) || !pv || b.prefilled || !S.affPages.has(b.page) || (!slot.stamp && (b.override || '').trim())) continue;
-      const img = document.createElement('img'); img.className = 'sig-ov'; img.src = settings[slot.url]; img.alt = '';
-      const r = (slot.stamp ? AE.stampBox : AE.signatureBox)(b, settings[slot.w] || 0, settings[slot.h] || 0);
-      const p1 = pv.vp.convertToViewportPoint(r.x, r.y + r.h), p2 = pv.vp.convertToViewportPoint(r.x + r.w, r.y);
-      Object.assign(img.style, { left: Math.min(p1[0], p2[0]) + 'px', top: Math.min(p1[1], p2[1]) + 'px', width: Math.abs(p2[0] - p1[0]) + 'px', height: Math.abs(p2[1] - p1[1]) + 'px' });
-      pv.wrap.appendChild(img);
+      // drag to move, drag the blue corner to resize, double-click to put it back; kept per blank for this request
+      const base = (slot.stamp ? AE.stampBox : AE.signatureBox)(b, settings[slot.w] || 0, settings[slot.h] || 0);
+      const box = document.createElement('div'); box.className = 'sig-ov';
+      box.title = `${slot.what[0].toUpperCase() + slot.what.slice(1)} — drag to move · drag the blue corner to resize · double-click to reset`;
+      box.innerHTML = `<img src="${settings[slot.url]}" alt=""><span class="rs"></span>`;
+      const place = () => {
+        const r = AE.placeBox(base, b.place && b.place[slot.p]);
+        const p1 = pv.vp.convertToViewportPoint(r.x, r.y + r.h), p2 = pv.vp.convertToViewportPoint(r.x + r.w, r.y);
+        Object.assign(box.style, { left: Math.min(p1[0], p2[0]) + 'px', top: Math.min(p1[1], p2[1]) + 'px', width: Math.abs(p2[0] - p1[0]) + 'px', height: Math.abs(p2[1] - p1[1]) + 'px' });
+      };
+      place();
+      box.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const resize = e.target.classList.contains('rs');
+        const rect = pv.wrap.getBoundingClientRect();
+        const at = ev => pv.vp.convertToPdfPoint(ev.clientX - rect.left, ev.clientY - rect.top);
+        const p0 = at(e), st = { dx: 0, dy: 0, s: 1, ...((b.place && b.place[slot.p]) || {}) };
+        box.classList.add('drag');
+        const move = ev => {
+          const p = at(ev), pl = { ...st };
+          if (resize) {
+            pl.s = Math.max(0.3, Math.min(4, st.s * (base.w * st.s + p[0] - p0[0]) / (base.w * st.s)));
+            pl.dy = st.dy + base.h * (st.s - pl.s); // the top-left corner stays put
+          } else { pl.dx = st.dx + p[0] - p0[0]; pl.dy = st.dy + p[1] - p0[1]; }
+          b.place = { ...(b.place || {}), [slot.p]: pl };
+          place();
+        };
+        const up = () => { box.classList.remove('drag'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+        window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+      });
+      box.addEventListener('click', e => e.stopPropagation());
+      box.addEventListener('dblclick', e => { e.stopPropagation(); if (b.place) delete b.place[slot.p]; place(); });
+      pv.wrap.appendChild(box);
     }
     for (const b of [...S.blanks, ...S.customs]) {
       const pv = pageViews.get(b.page);
@@ -1371,7 +1400,7 @@
       const fills = [...S.blanks.filter(b => b.include || (NOTARY.test(b.kind) && !b.prefilled)), ...S.customs].filter(b => S.affPages.has(b.page)).map(b => b.user
         ? { page: b.page, x: b.x, y: b.y, free: true, size: b.size, color: hexRgb(b.color), value: b.override || '' }
         : {
-          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null, field: true, name: b.kind, sig: b.kind === 'signature' ? 'affiant' : b.kind === 'notary_sig' ? 'notary' : null,
+          page: b.page, x: b.x, y: b.y, w: b.w, h: b.h, cover: b.prefilled ? b.prefilledBox : null, field: true, name: b.kind, sig: b.kind === 'signature' ? 'affiant' : b.kind === 'notary_sig' ? 'notary' : null, place: b.place || null,
           value: b.include ? shownValue(b) : '',
           align: /^(pages|notary_day|notary_year2|notary_year4)$/.test(b.kind) ? 'center' : 'left'
         });
