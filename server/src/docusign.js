@@ -3,7 +3,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 
-const env = process.env;
+// values pasted into a hosting panel often carry spaces or line breaks around them
+const env = Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, k.startsWith('DOCUSIGN_') && k !== 'DOCUSIGN_PRIVATE_KEY' ? String(v).trim() : v]));
 const ds = {
   integrationKey: env.DOCUSIGN_INTEGRATION_KEY || '',
   userId: env.DOCUSIGN_USER_ID || '',
@@ -38,6 +39,14 @@ export function consentUrl(origin) {
 }
 
 // ------------------------------------------------------------ access token (JWT grant), kept until it is about to expire
+const SIGN_IN_HINTS = {
+  user_not_found: 'DOCUSIGN_USER_ID is not a user of this DocuSign environment (developer and production User IDs differ; use the "User ID", not the "API Account ID").',
+  issuer_not_found: 'DOCUSIGN_INTEGRATION_KEY is unknown here (a developer-account key works only with demo.docusign.net / account-d.docusign.com).',
+  no_valid_keys_or_signatures: 'The private key file does not belong to this Integration Key. Use the private key of an RSA keypair listed on the same app.',
+  invalid_client: 'DOCUSIGN_INTEGRATION_KEY is wrong.',
+  expired_grant: 'The server clock is wrong.',
+  invalid_request: 'DOCUSIGN_OAUTH_HOST must be account-d.docusign.com (developer) or account.docusign.com (production).'
+};
 let token = { value: '', until: 0 };
 const b64url = b => Buffer.from(b).toString('base64url');
 async function accessToken(origin) {
@@ -55,8 +64,11 @@ async function accessToken(origin) {
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
-    if (j.error === 'consent_required') throw new DocusignError('DocuSign needs a one-time permission for this app.', { consent: consentUrl(origin) });
-    throw new DocusignError(`DocuSign sign-in failed (${j.error || r.status}). Check the DocuSign settings on the server.`);
+    // DocuSign often answers error "invalid_grant" and puts the real reason in error_description
+    const why = [j.error, j.error_description].filter(Boolean);
+    if (why.includes('consent_required')) throw new DocusignError('DocuSign needs a one-time permission for this app.', { consent: consentUrl(origin) });
+    const hint = why.map(w => SIGN_IN_HINTS[w]).find(Boolean) || 'Check the DocuSign settings on the server.';
+    throw new DocusignError(`DocuSign sign-in failed (${why.join(': ') || r.status}). ${hint}`);
   }
   token = { value: j.access_token, until: Date.now() + Math.max(60, (j.expires_in || 3600) - 300) * 1000 };
   return token.value;
