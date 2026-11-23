@@ -84,7 +84,7 @@ export async function sendEnvelope(doc, origin) {
   const hasStamp = (doc.tabs || []).some(x => x.type === 'stamp');
   try { return await postEnvelope(doc, origin, hasStamp); }
   catch (e) {
-    // an account without the Drawing field turns the envelope down; nothing was created, so send it again without the stamp boxes
+    // an account with stamps turned off turns the envelope down; nothing was created, so send it again without the stamp boxes
     if (!hasStamp || !(e instanceof DocusignError) || !e.rejected) throw e;
     const r = await postEnvelope(doc, origin, false);
     return { ...r, noStamp: true };
@@ -100,15 +100,15 @@ async function postEnvelope(doc, origin, withStamp) {
       documentId: '1', pageNumber: num(x.page), xPosition: num(x.x), yPosition: num(x.y), width: num(x.w || 80),
       tabLabel: cleanText(x.label || `field_${i + 1}`, 50), required: 'false', font: 'helvetica', fontSize: 'size10'
     }));
-    // a box where the signer uploads a photo of their stamp (or draws in it); optional
-    const drawTabs = withStamp ? mine.filter(x => x.type === 'stamp').slice(0, 1).map(x => ({
-      documentId: '1', pageNumber: num(x.page), xPosition: num(x.x), yPosition: num(x.y), width: num(x.w || 130), height: num(x.h || 70),
-      tabLabel: cleanText(x.label || 'stamp', 50), required: 'false', allowSignerUpload: 'true'
+    // DocuSign's "Stamp" field: the signer puts their adopted stamp (a notary's seal with name, ID and commission) there.
+    // The notary must stamp; the custodian may.
+    const stampTabs = withStamp ? mine.filter(x => x.type === 'stamp').slice(0, 1).map(x => ({
+      documentId: '1', pageNumber: num(x.page), xPosition: num(x.x), yPosition: num(x.y), stampType: 'stamp',
+      tabLabel: cleanText(x.label || 'stamp', 50), optional: role === 'notary' ? 'false' : 'true'
     })) : [];
     const tabs = {};
-    if (signHereTabs.length) tabs.signHereTabs = signHereTabs;
+    if (signHereTabs.length || stampTabs.length) tabs.signHereTabs = [...signHereTabs, ...stampTabs];
     if (textTabs.length) tabs.textTabs = textTabs;
-    if (drawTabs.length) tabs.drawTabs = drawTabs;
     return tabs;
   };
   const envelope = {

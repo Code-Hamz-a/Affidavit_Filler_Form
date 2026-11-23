@@ -1640,7 +1640,7 @@
       dsMsg('ok', `Sent. The custodian (${escHtml(custodian.email)}) gets the email first, then the notary (${escHtml(notary.email)}).` +
         ($('#ds-cc').checked ? ' The signed copy will be emailed to you as well.' : '') + ` Envelope ID: <b>${escHtml(j.envelopeId || '')}</b>.` +
         (tabs.some(t => t.type === 'sign') ? '' : ' No signature line was found, so DocuSign lets them place their signature themselves.') +
-        (j.noStamp ? ' This DocuSign account has the Drawing field turned off, so it went without the stamp boxes (an admin can turn it on in DocuSign).' : ''));
+        (j.noStamp ? ' This DocuSign account has stamps turned off, so it went without the Stamp boxes (a DocuSign admin can turn stamps on).' : ''));
       $('#out-info').textContent = `Sent to DocuSign · envelope ${j.envelopeId || ''}`;
     } catch (e) {
       console.error(e);
