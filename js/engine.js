@@ -1802,17 +1802,8 @@
     const stampImg = await embedSig(opts.notaryStamp);
     const placeOf = (f, k) => f.place && f.place[k];
     // where the custodian / notary sign or type in DocuSign (only blanks the tool left empty get a text box)
+    // (the custodian only signs; only the notary gets a stamp box)
     const pendingTabs = [], stampSpot = {};
-    // a box where the custodian can put (upload) their own stamp: beside their last signature line, level with it
-    // (from just above the line to where the next block starts), or under it when the line spans the page
-    const stampTab = (page, f) => {
-      const W = page.getWidth(), w = 130, h = 50, fw = f.w || 150;
-      let x, top = f.y + 10;
-      if (f.x + fw + 12 + w <= W - 18) x = f.x + fw + 12;
-      else if (f.x - 12 - w >= 18) x = f.x - 12 - w;
-      else { x = f.x + 4; top = f.y - 6; }
-      return { page, role: 'custodian', type: 'stamp', label: 'custodian_stamp', x, top, w, h };
-    };
     // the notary's stamp box: left of the notary line hanging down (where a notary seal usually goes), else under the
     // line, right of it, or above it on the left — the first spot on the page that covers none of the other boxes
     const notaryStampTab = (page, f, others) => {
@@ -1828,7 +1819,6 @@
     const addTab = (page, f, v) => {
       const rt = TAB_ROLES[f.name];
       if (!rt || (rt[1] === 'text' && v)) return;
-      if (rt[1] === 'sign' && rt[0] === 'custodian') stampSpot.custodian = stampTab(page, f);
       if (rt[1] === 'sign' && rt[0] === 'notary' && !stampImg) stampSpot.notary = { page, f }; // a printed notary stamp needs no box
       if (rt[1] === 'sign') pendingTabs.push({ page, role: rt[0], type: 'sign', label: f.name, x: f.x + 4, top: f.y + 30, w: 0 });
       else pendingTabs.push({ page, role: rt[0], type: 'text', label: f.name, x: f.x + 2, top: f.y + 11, w: Math.max(24, (f.w || 80) - 4) });
@@ -1941,7 +1931,7 @@
     // DocuSign boxes: page numbers and top-left positions in the finished file
     if (opts.tabs) {
       const all = out.getPages();
-      const stamps = stampSpot.custodian ? [stampSpot.custodian] : [];
+      const stamps = [];
       if (stampSpot.notary) stamps.push(notaryStampTab(stampSpot.notary.page, stampSpot.notary.f, [...pendingTabs, ...stamps]));
       for (const t of [...pendingTabs, ...stamps]) {
         const n = all.indexOf(t.page);
