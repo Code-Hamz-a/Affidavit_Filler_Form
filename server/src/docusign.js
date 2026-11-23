@@ -79,19 +79,29 @@ const num = v => String(Math.max(0, Math.round(Number(v) || 0)));
 const cleanText = (s, n = 100) => String(s ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
 
 /* doc: { pdfBase64, name, subject, custodian: {name, email}, notary: {name, email},
- *        tabs: [{ role: 'custodian'|'notary', type: 'sign'|'text', label, page, x, y, w }] } (x, y from the page's top-left, in points) */
+ *        tabs: [{ role: 'custodian'|'notary', type: 'sign'|'text'|'stamp', label, page, x, y, w }] } (x, y from the page's top-left, in points) */
+// First as a DocuSign Notary envelope, the way the office sends by hand: the custodian is an in-person signer whose
+// notary host is the notary; the notary gets a "Notarize Page" field and adds their notarial seal, signature and
+// commission from DocuSign's Notary Fields. An account without DocuSign Notary (or with stamps off) turns the envelope
+// down; nothing was created then, so it is sent again the simpler way: custodian signs, then the notary as a signer.
 export async function sendEnvelope(doc, origin) {
-  const hasStamp = (doc.tabs || []).some(x => x.type === 'stamp');
-  try { return await postEnvelope(doc, origin, hasStamp); }
-  catch (e) {
-    // an account with stamps turned off turns the envelope down; nothing was created, so send it again without the stamp boxes
-    if (!hasStamp || !(e instanceof DocusignError) || !e.rejected) throw e;
-    const r = await postEnvelope(doc, origin, false);
-    return { ...r, noStamp: true };
+  const anyStamp = (doc.tabs || []).some(x => x.type === 'stamp');
+  const tries = [];
+  for (const notaryMode of [true, false]) { tries.push([notaryMode, true]); if (anyStamp) tries.push([notaryMode, false]); }
+  let last;
+  for (const [notaryMode, withStamp] of tries) {
+    try {
+      const r = await postEnvelope(doc, origin, withStamp, notaryMode);
+      return { ...r, notary: notaryMode, noStamp: anyStamp && !withStamp };
+    } catch (e) {
+      if (!(e instanceof DocusignError) || !e.rejected) throw e;
+      last = e;
+    }
   }
+  throw last;
 }
 
-async function postEnvelope(doc, origin, withStamp) {
+async function postEnvelope(doc, origin, withStamp, notaryMode) {
   const t = await accessToken(origin);
   const tabsFor = role => {
     const mine = (doc.tabs || []).filter(x => x.role === role);
@@ -111,15 +121,31 @@ async function postEnvelope(doc, origin, withStamp) {
     if (textTabs.length) tabs.textTabs = textTabs;
     return tabs;
   };
+  // DocuSign Notary: only a "Notarize Page" field may be given to the notary host. It goes where the notary's seal
+  // belongs (left of the notary's signature line), else on the custodian's signature page.
+  const notarized = () => {
+    const all = doc.tabs || [];
+    const at = all.find(x => x.role === 'notary' && x.type === 'stamp') || all.find(x => x.role === 'notary') || all.find(x => x.role === 'custodian') || { page: 1, x: 72, y: 72 };
+    const custodianName = cleanText(doc.custodian.name), custodianEmail = cleanText(doc.custodian.email, 254);
+    return {
+      recipientId: '1', routingOrder: '1', inPersonSigningType: 'notary', roleName: 'Custodian',
+      name: custodianName, email: custodianEmail, hostName: custodianName, hostEmail: custodianEmail,
+      tabs: tabsFor('custodian'),
+      notaryHost: {
+        recipientId: '2', name: cleanText(doc.notary.name), email: cleanText(doc.notary.email, 254),
+        tabs: { notarizeTabs: [{ documentId: '1', pageNumber: num(at.page), xPosition: num(at.x), yPosition: num(at.y), width: '100', height: '22', required: 'true' }] }
+      }
+    };
+  };
   const envelope = {
     emailSubject: cleanText(doc.subject || 'Please sign: affidavit', 100),
     emailBlurb: 'Please review and sign the attached affidavit. The custodian of records signs first, then the notary.',
     documents: [{ documentId: '1', name: cleanText(doc.name || 'Affidavit.pdf', 100), fileExtension: 'pdf', documentBase64: doc.pdfBase64 }],
     recipients: {
-      signers: [
+      ...(notaryMode ? { inPersonSigners: [notarized()] } : { signers: [
         { recipientId: '1', routingOrder: '1', name: cleanText(doc.custodian.name), email: cleanText(doc.custodian.email, 254), roleName: 'Custodian', tabs: tabsFor('custodian') },
         { recipientId: '2', routingOrder: '2', name: cleanText(doc.notary.name), email: cleanText(doc.notary.email, 254), roleName: 'Notary', tabs: tabsFor('notary') }
-      ],
+      ] }),
       // the person who sent it gets the finished, signed copy by email
       ...(doc.cc && doc.cc.email ? { carbonCopies: [{ recipientId: '3', routingOrder: '3', name: cleanText(doc.cc.name), email: cleanText(doc.cc.email, 254) }] } : {})
     },
