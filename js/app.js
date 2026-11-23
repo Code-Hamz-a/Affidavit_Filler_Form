@@ -1538,7 +1538,7 @@
     return !(serious.length && !confirm('Please check before creating the PDF:\n\n• ' + serious.join('\n• ') + '\n\nCreate the PDF anyway?'));
   }
 
-  // Builds the finished PDF. forSign = for DocuSign: no signature pictures (they sign there), and the spots of the
+  // Builds the finished PDF. forSign = for DocuSign: no signature or stamp pictures (they sign and stamp there), and the spots of the
   // "Sign here" / text boxes are returned in tabs.
   async function makePdf(forSign) {
     {
@@ -1562,11 +1562,12 @@
       // white-out annotations on the affidavit pages we write on (see AE.buildPdf)
       const filledPages = new Set([...fills.filter(f => (f.value || '').trim()).map(f => f.page), ...ink.map(k => k.page)]);
       const whiteouts = S.req ? S.req.pages.filter(p => filledPages.has(p.num)).flatMap(p => (p.whiteouts || []).map(w => ({ ...w, page: p.num }))) : [];
-      const png = slot => sigActive(slot) && !(forSign && slot.p !== 'stamp') ? { png: dataUrlBytes(settings[slot.url]) } : null;
+      // for DocuSign the custodian and the notary sign and stamp there themselves, so no pictures from Settings go on the page
+      const png = slot => sigActive(slot) && !forSign ? { png: dataUrlBytes(settings[slot.url]) } : null;
       const tabs = forSign ? [] : null;
       const bytes = await AE.buildPdf({ requestBytes: S.req ? S.req.bytes.slice(0) : null, keepPages, fills, ink, attachments, standard, whiteouts,
         signature: png(SIG_SLOTS[0]), notarySignature: png(SIG_SLOTS[1]), notaryStamp: png(SIG_SLOTS[2]), tabs,
-        pics: S.pics.filter(pc => S.affPages.has(pc.page) && !(forSign && pc.p !== 'stamp')).map(pc => ({ page: pc.page, x: pc.x, y: pc.y, w: pc.w, h: pc.h, which: { sig: 'affiant', nsig: 'notary', stamp: 'stamp' }[pc.p] })) });
+        pics: S.pics.filter(pc => S.affPages.has(pc.page) && !forSign).map(pc => ({ page: pc.page, x: pc.x, y: pc.y, w: pc.w, h: pc.h, which: { sig: 'affiant', nsig: 'notary', stamp: 'stamp' }[pc.p] })) });
       let name = val('f-filename') || AE.fileName(d.patient, type(), null, val('f-reqid'), val('f-facility'));
       if (!/\.pdf$/i.test(name)) name += '.pdf';
       name = name.replace(/[\\/:*?"<>|]+/g, '');
