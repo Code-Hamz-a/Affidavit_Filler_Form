@@ -1890,6 +1890,9 @@
     if (opts.keepPages) {
       const keep = new Set(opts.keepPages);
       for (let i = pages.length - 1; i >= 0; i--) if (!keep.has(i + 1)) out.removePage(i);
+      // pdf-lib's removePage leaves its page list stale (getPages() still lists the removed pages), which put the
+      // DocuSign boxes on the old page numbers; refresh it
+      if (out.pageCache && out.pageCache.invalidate) out.pageCache.invalidate();
     }
 
     if (opts.standard) {
@@ -1930,6 +1933,7 @@
     if (form && nField) { try { form.updateFieldAppearances(font); } catch (e) { console.error(e); } }
     // DocuSign boxes: page numbers and top-left positions in the finished file
     if (opts.tabs) {
+      if (out.pageCache && out.pageCache.invalidate) out.pageCache.invalidate(); // the final page order, fresh
       const all = out.getPages();
       const stamps = [];
       if (stampSpot.notary) stamps.push(notaryStampTab(stampSpot.notary.page, stampSpot.notary.f, [...pendingTabs, ...stamps]));
