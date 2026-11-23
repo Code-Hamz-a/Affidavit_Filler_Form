@@ -101,10 +101,10 @@ async function postEnvelope(doc, origin, withStamp) {
       tabLabel: cleanText(x.label || `field_${i + 1}`, 50), required: 'false', font: 'helvetica', fontSize: 'size10'
     }));
     // DocuSign's "Stamp" field: the signer puts their adopted stamp (a notary's seal with name, ID and commission) there.
-    // The notary must stamp; the custodian may.
+    // Both the custodian and the notary must stamp (DocuSign's Next button leads them to it).
     const stampTabs = withStamp ? mine.filter(x => x.type === 'stamp').slice(0, 1).map(x => ({
       documentId: '1', pageNumber: num(x.page), xPosition: num(x.x), yPosition: num(x.y), stampType: 'stamp',
-      tabLabel: cleanText(x.label || 'stamp', 50), optional: role === 'notary' ? 'false' : 'true'
+      tabLabel: cleanText(x.label || 'stamp', 50), optional: 'false'
     })) : [];
     const tabs = {};
     if (signHereTabs.length || stampTabs.length) tabs.signHereTabs = [...signHereTabs, ...stampTabs];
