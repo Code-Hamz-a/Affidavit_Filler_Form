@@ -1806,17 +1806,30 @@
     // a box where the custodian can put (upload) their own stamp: beside their last signature line, level with it
     // (from just above the line to where the next block starts), or under it when the line spans the page
     const stampTab = (page, f) => {
-      const W = page.getWidth(), w = 130, h = 60, fw = f.w || 150;
-      let x, top = f.y + 12;
+      const W = page.getWidth(), w = 130, h = 50, fw = f.w || 150;
+      let x, top = f.y + 10;
       if (f.x + fw + 12 + w <= W - 18) x = f.x + fw + 12;
       else if (f.x - 12 - w >= 18) x = f.x - 12 - w;
       else { x = f.x + 4; top = f.y - 6; }
       return { page, role: 'custodian', type: 'stamp', label: 'custodian_stamp', x, top, w, h };
     };
+    // the notary's stamp box: left of the notary line hanging down (where a notary seal usually goes), else under the
+    // line, right of it, or above it on the left — the first spot on the page that covers none of the other boxes
+    const notaryStampTab = (page, f, others) => {
+      const W = page.getWidth(), H = page.getHeight(), w = 150, h = 65, fw = f.w || 150;
+      const rect = t => [t.x, t.top - (t.h || (t.type === 'sign' ? 32 : 13)), t.x + (t.type === 'sign' ? 140 : t.w), t.top];
+      const busy = others.filter(t => t.page === page).map(rect);
+      const free = ([x, top]) => x >= 18 && x + w <= W - 18 && top - h >= 18 && top <= H - 18 &&
+        !busy.some(([a, b, c, d]) => x < c && a < x + w && top - h < d && b < top);
+      const spots = [[f.x - w - 14, f.y + 10], [f.x + 4, f.y - 18], [f.x + fw + 12, f.y + 30], [f.x - w - 14, f.y + 10 + h]];
+      const at = spots.find(free) || [Math.max(24, f.x - w - 14), Math.max(18 + h, f.y + 10)];
+      return { page, role: 'notary', type: 'stamp', label: 'notary_stamp', x: at[0], top: at[1], w, h };
+    };
     const addTab = (page, f, v) => {
       const rt = TAB_ROLES[f.name];
       if (!rt || (rt[1] === 'text' && v)) return;
       if (rt[1] === 'sign' && rt[0] === 'custodian') stampSpot.custodian = stampTab(page, f);
+      if (rt[1] === 'sign' && rt[0] === 'notary' && !stampImg) stampSpot.notary = { page, f }; // a printed notary stamp needs no box
       if (rt[1] === 'sign') pendingTabs.push({ page, role: rt[0], type: 'sign', label: f.name, x: f.x + 4, top: f.y + 30, w: 0 });
       else pendingTabs.push({ page, role: rt[0], type: 'text', label: f.name, x: f.x + 2, top: f.y + 11, w: Math.max(24, (f.w || 80) - 4) });
     };
@@ -1928,7 +1941,9 @@
     // DocuSign boxes: page numbers and top-left positions in the finished file
     if (opts.tabs) {
       const all = out.getPages();
-      for (const t of [...pendingTabs, ...Object.values(stampSpot)]) {
+      const stamps = stampSpot.custodian ? [stampSpot.custodian] : [];
+      if (stampSpot.notary) stamps.push(notaryStampTab(stampSpot.notary.page, stampSpot.notary.f, [...pendingTabs, ...stamps]));
+      for (const t of [...pendingTabs, ...stamps]) {
         const n = all.indexOf(t.page);
         if (n < 0) continue;
         const H = t.page.getHeight();
@@ -1944,12 +1959,16 @@
     const page = PDFPage.create(doc);
     page.setSize(612, 792);
     const L = 72, R = 540, W = R - L;
-    let y = 720;
-    const center = (s, f, size) => { s = safe(s); page.drawText(s, { x: (612 - f.widthOfTextAtSize(s, size)) / 2, y, size, font: f, color: rgb(0, 0, 0) }); y -= size + 8; };
+    // A long affidavit (billing) gets smaller text and spacing so the notary block, and room for the notary's
+    // stamp beside its signature line, stay on the page: the body is laid out (not drawn) until it fits.
+    const NOTARY_BLOCK = 119, NOTARY_LINE_MIN = 85; // height from the custodian line down to the notary line
+    let y, dry;
+    const text = (s, o) => { if (!dry) page.drawText(s, o); };
+    const center = (s, f, size) => { s = safe(s); text(s, { x: (612 - f.widthOfTextAtSize(s, size)) / 2, y, size, font: f, color: rgb(0, 0, 0) }); y -= size + 8; };
     const para = (s, size = 11, indent = 36, gap = 10) => {
       const words = safe(s).split(' ');
       let line = '', first = true;
-      const flush = () => { page.drawText(line, { x: L + (first ? indent : 0), y, size, font, color: rgb(0, 0, 0) }); y -= size + 4; line = ''; first = false; };
+      const flush = () => { text(line, { x: L + (first ? indent : 0), y, size, font, color: rgb(0, 0, 0) }); y -= size + 4; line = ''; first = false; };
       for (const w of words) {
         const test = line ? line + ' ' + w : w;
         if (font.widthOfTextAtSize(test, size) > W - (first ? indent : 0)) flush();
@@ -1958,14 +1977,22 @@
       if (line) flush();
       y -= gap;
     };
-    center(t.title, bold, 13);
-    center(t.subtitle, font, 9.5);
-    y -= 6;
-    t.head.forEach(h => { page.drawText(safe(h), { x: L, y, size: 11, font: bold }); y -= 15; });
-    y -= 8;
-    const small = t.body.join(' ').length > 1900 ? 10 : 11;
-    t.body.forEach((b, i) => para(b, small, /^[a-e]\. /.test(b) ? 18 : 36, /^[a-d]\. /.test(b) ? 4 : 10));
-    y -= 18;
+    const top = (small, k) => {
+      y = 720;
+      center(t.title, bold, 13);
+      center(t.subtitle, font, 9.5);
+      y -= 6;
+      t.head.forEach(h => { text(safe(h), { x: L, y, size: 11, font: bold }); y -= 15; });
+      y -= 8;
+      t.body.forEach(b => para(b, small, /^[a-e]\. /.test(b) ? 18 : 36, (/^[a-d]\. /.test(b) ? 4 : 10) * k));
+      y -= 18 * k;
+    };
+    const first = t.body.join(' ').length > 1900 ? 10 : 11;
+    const fits = [[first, 1], [10, 1], [10, 0.6], [9.5, 0.5], [9, 0.4]].filter(([s]) => s <= first);
+    dry = true;
+    const pick = fits.find(([s, k]) => { top(s, k); return y - NOTARY_BLOCK >= NOTARY_LINE_MIN; }) || fits[fits.length - 1];
+    dry = false;
+    top(...pick);
     page.drawLine({ start: { x: 324, y }, end: { x: R, y }, thickness: 0.7 });
     if (field) field(page, { name: 'signature', x: 324, y, w: R - 324, h: 12 });
     y -= 13;
