@@ -88,13 +88,15 @@ export async function sendEnvelope(doc, origin) {
   const anyStamp = (doc.tabs || []).some(x => x.type === 'stamp');
   const tries = [];
   for (const notaryMode of [true, false]) { tries.push([notaryMode, true]); if (anyStamp) tries.push([notaryMode, false]); }
-  let last;
+  let last, notaryError = '';
   for (const [notaryMode, withStamp] of tries) {
     try {
       const r = await postEnvelope(doc, origin, withStamp, notaryMode);
-      return { ...r, notary: notaryMode, noStamp: anyStamp && !withStamp };
+      return { ...r, notary: notaryMode, noStamp: anyStamp && !withStamp, ...(notaryMode ? {} : { notaryError }) };
     } catch (e) {
       if (!(e instanceof DocusignError) || !e.rejected) throw e;
+      // DocuSign's own reason for turning the notary envelope down, shown to the sender
+      if (notaryMode) { notaryError = e.reason || e.message; console.error('DocuSign turned the notary envelope down:', notaryError); }
       last = e;
     }
   }
@@ -110,11 +112,11 @@ async function postEnvelope(doc, origin, withStamp, notaryMode) {
       documentId: '1', pageNumber: num(x.page), xPosition: num(x.x), yPosition: num(x.y), width: num(x.w || 80),
       tabLabel: cleanText(x.label || `field_${i + 1}`, 50), required: 'false', font: 'helvetica', fontSize: 'size10'
     }));
-    // DocuSign's "Stamp" field: the signer puts their adopted stamp (a notary's seal with name, ID and commission) there.
-    // Both the custodian and the notary must stamp (DocuSign's Next button leads them to it).
+    // DocuSign's "Stamp" field: the signer puts their adopted stamp there. Optional: an account with signature stamps
+    // turned off still accepts the field, but the signer then has no stamp to put in it and could never finish.
     const stampTabs = withStamp ? mine.filter(x => x.type === 'stamp').slice(0, 1).map(x => ({
       documentId: '1', pageNumber: num(x.page), xPosition: num(x.x), yPosition: num(x.y), stampType: 'stamp',
-      tabLabel: cleanText(x.label || 'stamp', 50), optional: 'false'
+      tabLabel: cleanText(x.label || 'stamp', 50), optional: 'true'
     })) : [];
     const tabs = {};
     if (signHereTabs.length || stampTabs.length) tabs.signHereTabs = [...signHereTabs, ...stampTabs];
@@ -158,6 +160,6 @@ async function postEnvelope(doc, origin, withStamp, notaryMode) {
   });
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) token = { value: '', until: 0 };
-  if (!r.ok) throw new DocusignError(`DocuSign did not accept the envelope: ${j.message || j.errorCode || r.status}`, { rejected: r.status === 400 });
+  if (!r.ok) throw new DocusignError(`DocuSign did not accept the envelope: ${j.message || j.errorCode || r.status}`, { rejected: r.status === 400, reason: [j.errorCode, j.message].filter(Boolean).join(": ") || String(r.status) });
   return { envelopeId: j.envelopeId, status: j.status };
 }

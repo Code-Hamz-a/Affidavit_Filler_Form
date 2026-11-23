@@ -1641,7 +1641,8 @@
         ($('#ds-cc').checked ? ' The signed copy will be emailed to you as well.' : '') + ` Envelope ID: <b>${escHtml(j.envelopeId || '')}</b>.` +
         (tabs.some(t => t.type === 'sign') ? '' : ' No signature line was found, so DocuSign lets them place their signature themselves.') +
         (j.notary ? ' Sent as a DocuSign Notary envelope: the notary gets “Notarize Page” and adds the notarial seal, signature and commission from Notary Fields.'
-          : ' This DocuSign account does not offer DocuSign Notary for this envelope, so the notary signs as a normal signer.') +
+          : ' DocuSign turned down the DocuSign Notary envelope, so the notary signs as a normal signer' +
+            (j.notaryError ? ` (DocuSign said: ${escHtml(j.notaryError)}).` : '.')) +
         (j.noStamp ? ' Stamps are turned off in this DocuSign account, so it went without the Stamp boxes (a DocuSign admin can turn stamps on).' : ''));
       $('#out-info').textContent = `Sent to DocuSign · envelope ${j.envelopeId || ''}`;
     } catch (e) {
