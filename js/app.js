@@ -296,13 +296,13 @@
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') return alert('Please choose a PDF file for the request.');
     busy(true, 'Reading request…');
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
+      const up = await AE.uprightPdf(new Uint8Array(await file.arrayBuffer())), bytes = up.bytes; // sideways scans are turned upright first
       const r = await AE.readPdf(pdfjsLib, bytes, { onProgress: (p, n) => busy(true, `Reading request… page ${p}/${n}`) });
       const ocrCount = await ocrScannedPages(r);
       const info = AE.parseRequest(r.pages);
       const blanks = AE.findBlanks(r.pages);
       if (S.req && S.req.doc) S.req.doc.destroy();
-      S.req = { name: file.name, bytes, doc: r.doc, pages: r.pages, info, cut: new Set(), allBlanks: blanks }; // cut = pages the user removed
+      S.req = { name: file.name, bytes, sideways: up.failed, doc: r.doc, pages: r.pages, info, cut: new Set(), allBlanks: blanks }; // cut = pages the user removed
       S.manual = {};
       S.customs = []; S.ink = []; S.undo = []; S.pics = []; S.picked = null;
       S.userAff = new Set();
@@ -1434,6 +1434,7 @@
     if (val('f-dob') && !AE.parseDate(val('f-dob'))) errs.push({ text: 'Date of birth is not a valid date (MM/DD/YYYY).', focus: 'f-dob' });
     if (val('f-from') && !AE.parseDate(val('f-from'))) errs.push({ text: 'DOS from is not a valid date (MM/DD/YYYY).', focus: 'f-from' });
     if (!d.custodian && !mergeOnly) errs.push({ text: 'Enter the custodian name in Settings.', focus: 's-custodian' });
+    if (S.req && S.req.sideways) warns.push('This request has sideways pages that could not be turned (protected PDF): text on them may print sideways. Print it to a new PDF and load that.');
     if (S.req && S.req.authNotes) S.req.authNotes.forEach(n => warns.push(n + ' Check that this is the right patient.'));
     if (val('f-facility') && !activeProfile()) warns.push(`“${val('f-facility')}” is not in your facility list — the default custodian is used (it is added to the list when you create the PDF).`);
     if (mergeOnly && !S.atts.length) errs.push({ text: 'Load the request PDF, or add the records / invoices to merge.' });

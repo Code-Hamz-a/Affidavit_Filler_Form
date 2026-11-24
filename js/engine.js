@@ -155,6 +155,85 @@
     return out;
   };
 
+  // --------------------------------------------------------- sideways pages
+  // A scanner often saves a page turned and asks the viewer to turn it back (/Rotate 90, 180, 270). Everything here works
+  // in the page's own coordinates, so such pages are really turned upright first: same look, no /Rotate left.
+  // Returns { bytes, turned: [page numbers], failed } — the bytes are untouched when no page is turned.
+  AE.uprightPdf = async function (bytes) {
+    const L = AE.PDFLib;
+    let doc;
+    const turned = [];
+    try {
+      doc = await L.PDFDocument.load(bytes.slice(0), { ignoreEncryption: true, updateMetadata: false });
+      const angle = pg => ((Math.round(pg.getRotation().angle / 90) * 90) % 360 + 360) % 360;
+      const pages = doc.getPages();
+      if (!pages.some(angle)) return { bytes, turned, failed: false };
+      if (doc.isEncrypted) return { bytes, turned, failed: true };
+      const N = n => L.PDFName.of(n), ctx = doc.context;
+      pages.forEach((pg, i) => {
+        const r = angle(pg);
+        if (!r) return;
+        const m = pg.getMediaBox(), c = pg.getCropBox();
+        // the part of the page that is shown
+        let x0 = Math.max(m.x, c.x), y0 = Math.max(m.y, c.y), x1 = Math.min(m.x + m.width, c.x + c.width), y1 = Math.min(m.y + m.height, c.y + c.height);
+        if (x1 <= x0 || y1 <= y0) { x0 = m.x; y0 = m.y; x1 = m.x + m.width; y1 = m.y + m.height; }
+        const M = r === 90 ? [0, -1, 1, 0, -y0, x1] : r === 180 ? [-1, 0, 0, -1, x1, y1] : [0, 1, -1, 0, y1, -x0];
+        const W = r === 180 ? x1 - x0 : y1 - y0, H = r === 180 ? y1 - y0 : x1 - x0;
+        const pt = (x, y) => [M[0] * x + M[2] * y + M[4], M[1] * x + M[3] * y + M[5]];
+        // page content
+        const old = pg.node.Contents();
+        const parts = !old ? [] : old instanceof L.PDFArray ? old.asArray() : [pg.node.get(N('Contents'))];
+        const stream = t => ctx.register(ctx.stream(t));
+        pg.node.set(N('Contents'), ctx.obj([stream(`q ${M.join(' ')} cm `), ...parts, stream(' Q ')]));
+        pg.node.set(N('MediaBox'), ctx.obj([0, 0, W, H]));
+        pg.node.set(N('CropBox'), ctx.obj([0, 0, W, H]));
+        ['BleedBox', 'TrimBox', 'ArtBox'].forEach(k => pg.node.delete(N(k)));
+        pg.node.set(N('Rotate'), ctx.obj(0));
+        // comments, stamps and form fields on the page turn with it
+        const annots = pg.node.Annots();
+        for (let k = 0; annots && k < annots.size(); k++) {
+          const a = annots.lookup(k);
+          if (!(a instanceof L.PDFDict)) continue;
+          const nums = v => v instanceof L.PDFArray ? v.asArray().map((_, j) => v.lookup(j)).map(n => n instanceof L.PDFNumber ? n.asNumber() : NaN) : null;
+          const points = v => { const n = nums(v); if (!n || n.length % 2 || n.some(isNaN)) return null; const o = []; for (let j = 0; j < n.length; j += 2) o.push(...pt(n[j], n[j + 1])); return o; };
+          const rect = points(a.lookup(N('Rect')));
+          if (rect && rect.length === 4) a.set(N('Rect'), ctx.obj([Math.min(rect[0], rect[2]), Math.min(rect[1], rect[3]), Math.max(rect[0], rect[2]), Math.max(rect[1], rect[3])]));
+          for (const key of ['QuadPoints', 'L', 'Vertices', 'CL']) { const o = points(a.lookup(N(key))); if (o) a.set(N(key), ctx.obj(o)); }
+          const ink = a.lookup(N('InkList'));
+          if (ink instanceof L.PDFArray) { const o = ink.asArray().map((_, j) => points(ink.lookup(j))); if (o.every(Boolean)) a.set(N('InkList'), ctx.obj(o)); }
+          // the appearance is drawn through its Matrix: turn a copy (it can be shared with other pages)
+          const turn = st => {
+            const d = st.dict.clone(ctx), f = nums(d.lookup(N('Matrix'))) || [1, 0, 0, 1, 0, 0], [A, B, C, D] = M;
+            d.set(N('Matrix'), ctx.obj([A * f[0] + C * f[1], B * f[0] + D * f[1], A * f[2] + C * f[3], B * f[2] + D * f[3], A * f[4] + C * f[5], B * f[4] + D * f[5]]));
+            return ctx.register(L.PDFRawStream.of(d, st.getContents()));
+          };
+          const ap = a.lookup(N('AP'));
+          if (ap instanceof L.PDFDict) {
+            const ap2 = ctx.obj({});
+            for (const [key] of ap.entries()) {
+              const v = ap.lookup(key);
+              if (v instanceof L.PDFStream) ap2.set(key, turn(v));
+              else if (v instanceof L.PDFDict) {
+                const states = ctx.obj({});
+                for (const [st] of v.entries()) { const sv = v.lookup(st); states.set(st, sv instanceof L.PDFStream ? turn(sv) : v.get(st)); }
+                ap2.set(key, states);
+              }
+            }
+            a.set(N('AP'), ap2);
+          }
+          const mk = a.lookup(N('MK'));
+          if (mk instanceof L.PDFDict) {
+            const was = mk.lookup(N('R')), mk2 = mk.clone(ctx);
+            mk2.set(N('R'), ctx.obj((((was instanceof L.PDFNumber ? was.asNumber() : 0) - r) % 360 + 360) % 360));
+            a.set(N('MK'), mk2);
+          }
+        }
+        turned.push(i + 1);
+      });
+      return { bytes: await doc.save({ updateFieldAppearances: false }), turned, failed: false };
+    } catch (e) { console.error(e); return { bytes, turned: [], failed: !!doc }; }
+  };
+
   // --------------------------------------------------------- PDF reading
   // opts: { fonts: read real glyph widths (needed only for blanks), onProgress(page, total) }
   AE.readPdf = async function (pdfjsLib, bytes, opts) {
