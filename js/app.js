@@ -1629,7 +1629,7 @@
         // no patient name in the email subject or document name
         body: JSON.stringify({
           pdfBase64: toBase64(bytes), name: `Affidavit${reqId ? ' ' + reqId : ''}.pdf`, subject: `Please sign: affidavit${reqId ? ' – request ' + reqId : ''}`,
-          type: type(), subpoena: /Subpoena \/ DWQ/.test($('#req-info').textContent || ''), custodian, notary, tabs, ccMe: $('#ds-cc').checked
+          requestId: reqId, type: type(), subpoena: /Subpoena \/ DWQ/.test($('#req-info').textContent || ''), custodian, notary, tabs, ccMe: $('#ds-cc').checked
         })
       });
       const j = await r.json().catch(() => ({}));

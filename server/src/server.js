@@ -7,7 +7,8 @@ import QRCode from 'qrcode';
 import { config, POLICY, ACCESS, TOOL_DIR, PUBLIC_DIR } from './config.js';
 import { db, now, audit, userById, userByEmail, userCount, adminCount, accessOf, setMeta, cleanup } from './db.js';
 import * as sec from './security.js';
-import { docusignConfigured, docusignDemo, sendEnvelope, DocusignError } from './docusign.js';
+import { docusignConfigured, docusignDemo, docusignSite, sendEnvelope, DocusignError } from './docusign.js';
+import * as notaryLog from './notary.js';
 
 const MIN = 60 * 1000;
 const COOKIE = config.insecureHttp ? 'af_sid' : '__Host-af_sid';
@@ -166,6 +167,7 @@ app.get('/setup', sendPage('setup'));
 app.get('/twostep', needStage('twostep_setup', 'full'), sendPage('twostep'));
 app.get('/change-password', needStage('password_change', 'full'), sendPage('change-password'));
 app.get('/admin', needStage('full'), (req, res, next) => req.user.role === 'admin' ? next() : res.redirect(303, '/app/'), sendPage('admin'));
+app.get('/admin/notary', needStage('full'), (req, res, next) => req.user.role === 'admin' ? next() : res.redirect(303, '/app/'), sendPage('notary'));
 
 // The tool pages (Affidavit Filler, Itemized Billing), with the sign-in bar and access rules added.
 const toolCache = new Map(); // file name -> { mtime, html }
@@ -212,6 +214,8 @@ app.post('/api/docusign/send', needStage('full'), express.json({ limit: '40mb' }
       cc: b.ccMe ? { name: req.user.name, email: req.user.email } : null,
       tabs: Array.isArray(b.tabs) ? b.tabs.slice(0, 200) : [] }, `${req.protocol}://${req.get('host')}`);
     audit('docusign', `${req.user.name} sent an affidavit to DocuSign (envelope ${r.envelopeId})`, req.user.email, ipOf(req));
+    notaryLog.recordSent({ envelopeId: r.envelopeId, requestId: str(b.requestId, 60), subject: str(b.subject, 100), kind: b.subpoena ? 'subpoena' : kind,
+      sender: req.user, custodian, notary, notaryMode: r.notary });
     res.json(r);
   } catch (e) {
     if (e instanceof DocusignError) return fail(res, e.consent ? 409 : 502, e.message, e.consent ? { consent: e.consent } : {});
@@ -551,6 +555,30 @@ admin.get('/activity', (req, res) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
   res.json({ events: db.prepare('SELECT at, actor, kind, text, ip FROM audit ORDER BY id DESC LIMIT ?').all(limit) });
 });
+
+// ------------------------------------------------------------ admin: notary tracking
+admin.get('/notary', (req, res) => {
+  notaryLog.refresh(); // in the background; the page asks again while it runs
+  res.json({ rows: notaryLog.list(), now: now(), configured: docusignConfigured(), demo: docusignDemo(), site: docusignSite(), pollMinutes: notaryLog.POLL_MS / MIN, ...notaryLog.trackingInfo() });
+});
+admin.post('/notary/:id/remind', async (req, res) => {
+  const r = notaryLog.requestById(Number(req.params.id));
+  if (!r) return fail(res, 404, 'This request no longer exists.');
+  if (!['cust', 'not'].includes(notaryLog.stateOf(r))) return fail(res, 400, 'This request is already finished.');
+  if (r.reminded_at && r.reminded_at > now() - 60 * MIN) return fail(res, 429, 'A reminder was sent less than an hour ago.');
+  try {
+    const problem = await notaryLog.remind(r);
+    if (problem) return fail(res, 502, `DocuSign did not send the reminder: ${problem}`);
+  } catch (e) {
+    if (e instanceof DocusignError) return fail(res, 502, e.message);
+    console.error(e);
+    return fail(res, 502, 'Could not reach DocuSign. Try again in a minute.');
+  }
+  audit('docusign', `${req.user.name} sent a DocuSign reminder (envelope ${r.envelope_id})`, ...actor(req));
+  res.json({ ok: true });
+});
+notaryLog.importFromLog();
+setInterval(() => notaryLog.refresh(), 5 * MIN).unref();
 
 app.use('/api/admin', admin);
 

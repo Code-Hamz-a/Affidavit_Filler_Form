@@ -74,6 +74,22 @@ async function accessToken(origin) {
   return token.value;
 }
 
+export const docusignAccount = () => ds.accountId;
+// Where an admin opens an envelope in DocuSign's own site.
+export const docusignSite = () => docusignDemo() ? 'https://apps-d.docusign.com' : 'https://apps.docusign.com';
+
+// One eSignature call under this account: { ok, status, body }. Throws only when signing in or reaching DocuSign fails.
+export async function docusignApi(method, path, body) {
+  const t = await accessToken('');
+  const r = await fetch(`${ds.basePath}/v2.1/accounts/${encodeURIComponent(ds.accountId)}${path}`, {
+    method, signal: AbortSignal.timeout(20000),
+    headers: { Authorization: `Bearer ${t}`, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  });
+  if (r.status === 401) token = { value: '', until: 0 };
+  return { ok: r.ok, status: r.status, body: await r.json().catch(() => ({})) };
+}
+
 // ------------------------------------------------------------ envelope
 const num = v => String(Math.max(0, Math.round(Number(v) || 0)));
 const cleanText = (s, n = 100) => String(s ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);

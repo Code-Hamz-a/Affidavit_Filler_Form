@@ -140,7 +140,7 @@
     ].map(([k, v]) => h('div', { class: 'kv' }, h('span', {}, k), h('b', {}, v))));
   }
 
-  const KIND = { signin: 'Sign-in', failed: 'Failed', signout: 'Sign-out', admin: 'Admin', setup: 'Setup', account: 'Account' };
+  const KIND = { signin: 'Sign-in', failed: 'Failed', signout: 'Sign-out', admin: 'Admin', setup: 'Setup', account: 'Account', docusign: 'DocuSign' };
   async function loadEvents(passive) {
     const { events } = await api(`/api/admin/activity?limit=${eventLimit}`, null, 'GET', passive);
     $('#events').replaceChildren(...(events.length ? events.map(e => h('div', { class: 'ev' },
